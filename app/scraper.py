@@ -6,3 +6,9 @@ class OzonScraper:
 
     def __init__(self, database: Database):
         self.database = database
+
+    def update_offers_job(self) -> None:
+        pass
+
+    def update_offers_job(self) -> None:
+        pass
