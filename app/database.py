@@ -1,30 +1,6 @@
 import os
 import sqlite3
-from pydantic import BaseModel
-
-
-class UserModel(BaseModel):
-    tid: int
-    name: str
-    username: str
-    user_pfp: str | None = None
-
-
-class TrackedProductModel(BaseModel):
-    id: str | None = None
-    url: str
-    sku: str
-    name: str
-    price: str
-    seller: str
-    tracking_price: str | None = None
-    
-
-class TrackingModel(BaseModel):
-    user_tid: str
-    product_id: str
-    new_price: str | None
-
+from api_models import *
 
 class Database:
     conn: sqlite3.Connection
