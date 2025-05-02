@@ -8,7 +8,7 @@ class UserModel(BaseModel):
     name: str
     username: str
     user_pfp: str | None = None
-    
+
 
 class TrackedProductModel(BaseModel):
     id: str | None = None
@@ -19,10 +19,12 @@ class TrackedProductModel(BaseModel):
     seller: str
     tracking_price: str | None = None
     
+
 class TrackingModel(BaseModel):
     user_tid: str
     product_id: str
     new_price: str | None
+
 
 class Database:
     conn: sqlite3.Connection
@@ -48,11 +50,11 @@ class Database:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS products (
             product_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT NOT NULL
-            sku TEXT NOT NULL
-            name TEXT NOT NULL
-            price TEXT NOT NULL
-            seller TEXT NOT NULL
+            url TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            name TEXT NOT NULL,
+            price TEXT NOT NULL,
+            seller TEXT NOT NULL,
             tracking_price TEXT
         );""")
         cursor.execute("""
@@ -60,8 +62,8 @@ class Database:
             telegram_id INTEGER NOT NULL,
             product_id INTEGER NOT NULL,
             new_price TEXT,
-            FOREIGN KEY telegram_id REFERENCES users(telegram_id),
-            FOREIGN KEY product_id REFERENCES products(product_id),
+            FOREIGN KEY (telegram_id) REFERENCES users(telegram_id),
+            FOREIGN KEY (product_id) REFERENCES products(product_id),
             PRIMARY KEY (telegram_id, product_id)
         );""")
         cursor.execute("""
@@ -69,7 +71,7 @@ class Database:
             product_id INTEGER,
             price TEXT NOT NULL,
             time TEXT NOT NULL,
-            FOREIGN KEY product_id REFERENCES products(product_id)
+            FOREIGN KEY (product_id) REFERENCES products(product_id)
         );""") # TODO: TIMESTAMP for time maybe. Don't know which is more complicated operation
         self.conn.commit()
     
@@ -199,4 +201,7 @@ class Database:
         """, (product_id,))
         ret = [(result[0], result[1]) for result in cursor.fetchall()]
         return sorted(ret, key=lambda x: x[1])
-        
+    
+    def close(self):
+        if self.conn:
+            self.conn.close()
