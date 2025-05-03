@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from api_models import *
+from .api_models import UserModel, TrackedProductModel, TrackingModel
 
 class Database:
     conn: sqlite3.Connection
@@ -30,8 +30,7 @@ class Database:
             sku TEXT NOT NULL,
             name TEXT NOT NULL,
             price TEXT NOT NULL,
-            seller TEXT NOT NULL,
-            tracking_price TEXT
+            seller TEXT NOT NULL
         );""")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tracking (
@@ -60,7 +59,12 @@ class Database:
         WHERE telegram_id = ?
         RETURNING *;
         """, (user.name, user.username, user.user_pfp, user.tid))
-
+        if not cursor.fetchall():
+            cursor.execute("""
+            INSERT INTO users
+            VALUES (?, ?, ?, ?)
+            """, (user.tid, user.name, user.username, user.user_pfp))
+        
         self.conn.commit()
         return True
         
@@ -71,12 +75,10 @@ class Database:
         def lmb(p: TrackedProductModel):
             cursor.execute("""
             UPDATE products
-            SET url = ?, sku = ?, name = ?, price = ?,
-            seller = ?, tracking_price = ?
+            SET url = ?, sku = ?, name = ?, price = ?, seller = ?
             WHERE product_id = ?
             RETURNING *;
-            """, (p.url, p.sku, p.name, p.price,
-                  p.seller, p.tracking_price, p.id))
+            """, (p.url, p.sku, p.name, p.price, p.seller, p.id))
             return len(cursor.fetchall())
         [lmb(prod) for prod in products]
 
@@ -90,18 +92,18 @@ class Database:
         cursor.execute("""
         SELECT product_id FROM products
         WHERE sku = ?;
-        """, (product.sku))
-        if cursor.fetchall():
+        """, (product.sku,))
+        ret = cursor.fetchall()
+        if not cursor.fetchall():
             cursor.execute("""
-            INSERT INTO products
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO products (url, sku, name, price, seller)
+            VALUES (?, ?, ?, ?, ?)
             RETURNING product_id;
-            """, (product.id, product.url, product.sku,
-                  product.name, product.price, product.seller,
-                  product.tracking_price))
-            ret = cursor.fetchone()[0]
+            """, (product.url, product.sku, product.name, 
+                  product.price, product.seller))
+            ret = cursor.fetchall()[0][0]
             self.conn.commit()
-        
+
         return ret
     
     # Should add or update entry into tracking
@@ -110,19 +112,21 @@ class Database:
         cursor.execute("""
         UPDATE tracking
         SET new_price = ?
-        WHERE telegram_id = ?, product_id = ?
+        WHERE telegram_id = ? AND product_id = ?
         RETURNING *;
         """, (tracking_info.new_price,
               tracking_info.user_tid,
               tracking_info.product_id))
         
-        if cursor.fetchone():
+        if not cursor.fetchall():
             cursor.execute("""
             INSERT INTO tracking
-            VALUES(? ? ?);
-            """, (tracking_info.new_price,
-                  tracking_info.user_tid,
-                  tracking_info.product_id))
+            VALUES (?, ?, ?);
+            """, (tracking_info.user_tid,
+                  tracking_info.product_id,
+                  tracking_info.new_price))
+            cursor.fetchall()
+        
         self.conn.commit()
         return True
     
@@ -130,11 +134,25 @@ class Database:
     def get_tracked_products(self, user_tid: str) -> list[TrackedProductModel] | None:
         cursor = self.conn.cursor()
         cursor.execute("""
-        SELECT * FROM products
-        WHERE product_id = ?;
+        SELECT product_id FROM tracking
+        WHERE telegram_id = ?;
         """, (user_tid,))
-
-        ret = [TrackedProductModel(val) for val in cursor.fetchall()]
+        ret = cursor.fetchall()
+        def lmb(x: str):
+            cursor.execute("""
+            SELECT url, sku, name, price, seller
+            FROM products
+            WHERE product_id = ?;               
+            """, (x,))
+            results = cursor.fetchall()[0]
+            return TrackedProductModel(id=None,
+                                       url=results[0],
+                                       sku=results[1],
+                                       name=results[2],
+                                       price=results[3],
+                                       seller=results[4],
+                                       tracking_price=None)
+        ret = [lmb(val[0]) for val in ret]
         return ret
     
     # Should return dictionary of users that track the products listed
@@ -158,7 +176,7 @@ class Database:
             SELECT price FROM products
             WHERE product_id = ?;
             """, (p,))
-            price = cursor.fetchone()[0]
+            price = cursor.fetchall()[0]
             cursor.execute("""
             INSERT INTO history
             VALUES (?, ?, ?);
@@ -177,6 +195,24 @@ class Database:
         """, (product_id,))
         ret = [(result[0], result[1]) for result in cursor.fetchall()]
         return sorted(ret, key=lambda x: x[1])
+    
+    def reset(self):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        DROP TABLE IF EXISTS users;
+        """)
+        cursor.execute("""
+        DROP TABLE IF EXISTS products;
+        """)
+        cursor.execute("""
+        DROP TABLE IF EXISTS tracking;
+        """)
+        cursor.execute("""
+        DROP TABLE IF EXISTS history;               
+        """)
+        cursor.fetchall()
+        self.conn.commit()
+        self._init_db()
     
     def close(self):
         if self.conn:
