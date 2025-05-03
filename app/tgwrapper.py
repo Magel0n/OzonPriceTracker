@@ -1,111 +1,217 @@
 import os
-import requests
-import time
-from api_models import *
-from typing import Set
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+import asyncio
 
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.client.default import DefaultBotProperties
+
+from api_models import UserModel, TrackedProductModel
+from database import Database
 
 class TelegramWrapper:
-    BASE_URL_CORE = "https://api.telegram.org/bot"
-
-    bot_token: str
-    base_url: str
-
     def __init__(self):
+        self.bot = Bot(
+            token=os.getenv('TG_BOT_TOKEN'),
+            default=DefaultBotProperties(parse_mode="HTML")
+        )
+        self.dp = Dispatcher()
+        self.db = Database()
+        self.user_sessions: Dict[int, dict] = {}
 
-        try:
-            response = requests.get("https://api.telegram.org", timeout=5)
-            print(f"Connection successful (status {response.status_code})")
-        except Exception as e:
-            print(f"Connection failed: {e}")
+        # Register handlers
+        self.dp.message(Command("start"))(self._handle_start)
+        self.dp.message(Command("auth"))(self._handle_auth)
 
-        self.bot_token = os.environ.get("TG_BOT_TOKEN")
-        if not self.bot_token:
-            raise ValueError("TG_BOT_TOKEN environment variable not set")
-        self.base_url = f"{self.BASE_URL_CORE}{self.bot_token}/"
-        self.authorized_users: Set[int] = set()
-        self.last_update_id = None
+        # Run tests if in test mode
+        if os.getenv('TEST_MODE') == '1':
+            self.run_tests()
 
-    def _make_request(self, method: str, params: dict = None) -> dict:
-        """Internal method for making API requests"""
-        url = f"{self.base_url}{method}"
-        response = requests.post(url, json=params) if params else requests.get(url)
-        print(response.status_code, response.json())
-        return response.json()
+    def get_user_info(self, user_tid: str) -> Optional[UserModel]:
+        """Synchronously get user info from Telegram"""
+        async def async_get_user_info():
+            try:
+                chat = await self.bot.get_chat(user_tid)
+                return UserModel(
+                    tid=int(user_tid),
+                    name=f"{chat.first_name or ''} {chat.last_name or ''}".strip(),
+                    username=chat.username or "",
+                    user_pfp=None
+                )
+            except Exception as e:
+                print(f"Error getting user info: {e}")
+                return None
+        return self._run_async(async_get_user_info())
 
-    def get_updates(self) -> dict:
-        """Get new messages sent to your bot"""
-        params = {'timeout': 5}
-        if self.last_update_id:
-            params['offset'] = self.last_update_id + 1
-        return self._make_request('getUpdates', params)
+    def push_notifications(self, users_to_products: dict[str, list[TrackedProductModel]]) -> bool:
+        """Push notifications to users about product updates"""
+        async def async_push_notifications():
+            success = True
+            for user_tid, products in users_to_products.items():
+                user_id = int(user_tid)
+                message = "Product updates:\n\n"
+                
+                for product in products:
+                    price_info = f"Current price: {product.price}"
+                    if product.tracking_price:
+                        price_info += f" (Tracking: {product.tracking_price})"
+                    
+                    message += (
+                        f"{product.name}\n"
+                        f"{price_info}\n"
+                        f"Seller: {product.seller}\n"
+                        f"{product.url}\n\n"
+                    )
 
-    def send_message(self, chat_id: int, text: str) -> dict:
-        """Send a message to a specific chat"""
-        if chat_id not in self.authorized_users:
-            print("You are not authorized to send messages to that chat", chat_id)
-            return {"ok": False, "description": "User not authorized"}
-        return self._make_request('sendMessage', {'chat_id': chat_id, 'text': text})
+                try:
+                    await self.bot.send_message(
+                        user_id,
+                        message,
+                        disable_web_page_preview=True
+                    )
+                except Exception as e:
+                    print(f"Error sending message to {user_id}: {e}")
+                    success = False
+            return success
 
-    def authorize_user(self, telegram_id: int) -> None:
-        """Add a user to the authorized list"""
-        self.authorized_users.add(telegram_id)
+        return self._run_async(async_push_notifications())
 
-    def is_authorized(self, telegram_id: int) -> bool:
-        """Check if user is authorized"""
-        return telegram_id in self.authorized_users
+    def _handle_start(self, message: types.Message):
+        """Synchronously handle /start command"""
+        welcome_text = (
+            "Welcome to Price Tracker Bot!\n\n"
+            "I can help you track product prices from Ozon and notify you when prices drop.\n\n"
+            "Use /auth to authenticate and link your account\n"
+            "You'll receive notifications when prices drop below your specified limits."
+        )
+        self._run_async(self.bot.send_message(
+            chat_id=message.chat.id,
+            text=welcome_text
+        ))
 
-    def tick(self) -> None:
-        """Process one update cycle"""
-        print("Got to start tick")
-        updates = self.get_updates()
-        print("Got to tick")
-
-        if not updates.get('result'):
-            print("No updates received")
+    def _handle_auth(self, message: types.Message):
+        """Synchronously handle /auth command"""
+        user_id = str(message.from_user.id)
+        user = self.get_user_info(user_id)
+        if not user:
+            self._run_async(self.bot.send_message(
+                chat_id=message.chat.id,
+                text="Could not retrieve your Telegram profile information."
+            ))
             return
+        
+        if not self.db.login_user(user):
+            self._run_async(self.bot.send_message(
+                chat_id=message.chat.id,
+                text="Failed to authenticate. Please try again."
+            ))
+            return
+        
+        token = f"streamlit_{user_id}_{datetime.now().timestamp()}"
+        expires = datetime.now() + timedelta(hours=1)
+        self.user_sessions[int(user_id)] = {
+            'token': token,
+            'expires': expires
+        }
+        
+        streamlit_link = f"https://your-streamlit-app.com/session?token={token}"
+        auth_message = (
+            "Authentication successful!\n\n"
+            f"Your session token: {token}\n"
+            f"Expires at: {expires.strftime('%Y-%m-%d %H:%M')}\n\n"
+            f"Open dashboard: {streamlit_link}"
+        )
+        self._run_async(self.bot.send_message(
+            chat_id=message.chat.id,
+            text=auth_message
+        ))
 
-        for update in updates['result']:
-            self.last_update_id = update['update_id']
-            message = update.get('message', {})
-            chat_id = message.get('chat', {}).get('id')
-            text = message.get('text', '').strip().lower()
+    def start(self):
+        """Start the bot synchronously"""
+        async def async_start():
+            await self.dp.start_polling(self.bot)
+        self._run_async(async_start())
 
-            if not chat_id:
-                continue
+    def run_tests(self):
+        """Run test cases synchronously"""
+        test_user_id = os.getenv('TEST_USER_ID')
+        if not test_user_id:
+            print("TEST_USER_ID environment variable not set")
+            return False
 
-            if text == '/start':
-                self.send_message(chat_id, "Welcome! Send /auth to get authorized.")
+        print("\nRunning tests...")
 
-            elif text == '/auth':
-                self.authorize_user(chat_id)
-                self.send_message(chat_id, "You are now authorized! Send /test to verify.")
+        # Create complete test user object
+        test_user = types.User(
+            id=int(test_user_id),
+            is_bot=False,
+            first_name="Test",
+            last_name="User",
+            username="testuser",
+            language_code="en"
+        )
 
-            elif text == '/test':
-                if self.is_authorized(chat_id):
-                    self.send_message(chat_id, "This is a test message for authorized users!")
-                else:
-                    self.send_message(chat_id, "You need to send /auth first!")
+        # Test get_user_info
+        print("Testing get_user_info...")
+        user_info = self.get_user_info(test_user_id)
+        print(f"User info: {user_info}")
+    
+        # Test start command
+        print("\nTesting /start command...")
+        start_message = types.Message(
+            message_id=1,
+            date=datetime.now(),
+            chat=types.Chat(
+                id=int(test_user_id),
+                type="private",
+                first_name=test_user.first_name,
+                last_name=test_user.last_name,
+                username=test_user.username
+            ),
+            from_user=test_user,
+            text="/start"
+        )
+        self._handle_start(start_message)
+    
+        # Test auth command
+        print("\nTesting /auth command...")
+        auth_message = types.Message(
+            message_id=2,
+            date=datetime.now(),
+            chat=types.Chat(
+                id=int(test_user_id),
+                type="private",
+                first_name=test_user.first_name,
+                last_name=test_user.last_name,
+                username=test_user.username
+            ),
+            from_user=test_user,
+            text="/auth"
+        )
+        self._handle_auth(auth_message)
+    
+        # Test push_notifications
+        print("\nTesting push_notifications...")
+        test_products = [
+            TrackedProductModel(
+                id="test_product_1",  # Required field added
+                url="https://example.com/product1",
+                sku="TEST123",
+                name="Test Product",
+                price="100.00",
+                seller="Test Seller",
+                tracking_price="90.00"
+            )
+        ]
+        success = self.push_notifications({test_user_id: test_products})
+        print(f"Notification test {'passed' if success else 'failed'}")
+    
+        return True
 
-            elif text.startswith('/'):
-                self.send_message(chat_id, "Unknown command")
+    def _run_async(self, coroutine):
+        """Helper method to run async code synchronously"""
+        return asyncio.get_event_loop().run_until_complete(coroutine)
 
-    def start(self, interval: float = 1.0) -> None:
-        """Start the bot with specified tick interval (in seconds)"""
-        print("Bot started. Press Ctrl+C to stop.")
-        try:
-            while True:
-                self.tick()
-                time.sleep(interval)
-        except KeyboardInterrupt:
-            print("\nBot stopped.")
-
-#    def push_notifications(users_to_products: dict[str, list[TrackedProductModel]]) -> bool:
-#        pass
-#
-#    def get_user_info(user_tid: str) -> UserModel | None:
-#        pass
-
-
-tgwrapper = TelegramWrapper()
-tgwrapper.start()
+if __name__ == '__main__':
+    TelegramWrapper().start()
