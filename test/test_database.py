@@ -103,7 +103,12 @@ class TestDatabase:
                                       price="999",
                                       seller="ozonstore", 
                                       tracking_price="899")
+        
         db.login_user(user)
+        test_user = db.get_user(user.tid)
+        assert user.name == test_user.name and \
+            user.username == test_user.username
+        
         prod_id = db.add_product(product)
         track = TrackingModel(user_tid=str(user.tid), product_id=str(prod_id), new_price=product.price)
         db.add_tracking(track)
