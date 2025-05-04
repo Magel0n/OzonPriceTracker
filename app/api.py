@@ -79,11 +79,8 @@ async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
         raise credentials_exception
 
 
-@app.get("/user/{tid}")
-async def get_user(tid: str, user_tid: Annotated[str, Depends(validate_token)]) -> UserResponse | ErrorResponse:
-    if user_tid != tid:
-        return ErrorResponse(message="Unauthorized to perform actions on other users")
-
+@app.get("/profile")
+async def get_user(user_tid: Annotated[str, Depends(validate_token)]) -> UserResponse | ErrorResponse:
     user = app.state.database.get_user(tid)
 
     if user == None:
