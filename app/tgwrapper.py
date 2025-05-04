@@ -11,19 +11,19 @@ from api_models import UserModel, TrackedProductModel
 from database import Database
 
 class TelegramWrapper:
-    def __init__(self):
+    def __init__(self, database: Database):
         self.bot = Bot(
             token=os.getenv('TG_BOT_TOKEN'),
             default=DefaultBotProperties(parse_mode="HTML")
         )
         self.dp = Dispatcher()
-        self.db = Database()
+        self.db = database
         self.user_sessions: Dict[int, dict] = {}
 
         # Register handlers
         self.dp.message(Command("start"))(self._handle_start)
         self.dp.message(Command("auth"))(self._handle_auth)
-
+        
         # Run tests if in test mode
         if os.getenv('TEST_MODE') == '1':
             self.run_tests()

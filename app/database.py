@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from .api_models import UserModel, TrackedProductModel, TrackingModel
+from api_models import *
 
 class Database:
     conn: sqlite3.Connection
