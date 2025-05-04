@@ -70,6 +70,7 @@ class TestDatabase:
         test_user = UserModel(tid=288, name="Timur", username="tjann", user_pfp="asfgvsvbwef1234")
         db.login_user(test_user)
         
+        
         db.add_tracking(TrackingModel(user_tid=str(test_user.tid), product_id=str(prod_1), new_price=None))
         db.add_tracking(TrackingModel(user_tid=str(test_user.tid), product_id=str(prod_2), new_price=None))
         db.add_tracking(TrackingModel(user_tid=str(test_user.tid), product_id=str(prod_3), new_price=None))
@@ -78,9 +79,17 @@ class TestDatabase:
             product.name = "changed product name"
         db.update_products(products)
         results = db.get_tracked_products(test_user.tid)
-        assert results[0].name == products[0].name and \
+        assert len(results) == 3 and \
+            results[0].name == products[0].name and \
             results[1].name == products[1].name and \
             results[2].name == products[2].name
+
+        db.delete_tracking(TrackingModel(user_tid=str(test_user.tid), product_id=str(prod_3), new_price=None))
+        
+        results = db.get_tracked_products(test_user.tid)
+        assert len(results) == 2 and \
+            results[0].name == products[0].name and \
+            results[1].name == products[1].name
         
         
     def test_whatever(self):
