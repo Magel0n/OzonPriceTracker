@@ -1,6 +1,9 @@
 import os
+import random
+import string
 from sre_constants import SUCCESS
 import uvicorn
+import time
 from api_models import *
 from logging import getLogger
 from fastapi import FastAPI
@@ -9,6 +12,13 @@ from tgwrapper import create_telegram_wrapper
 from scraper import OzonScraper
 from contextlib import asynccontextmanager
 import logging
+from typing import Annotated
+import jwt
+from fastapi import Depends, FastAPI, HTTPException, status, Request
+from jwt.exceptions import InvalidTokenError
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+TOKEN_ENCRYPTION_ALGORITHM = os.environ.get("TOKEN_ENCRYPTION_ALGORITHM", "HS256")
 
 # Initialize logging
 logging.basicConfig(
@@ -23,9 +33,11 @@ async def lifespan(app: FastAPI):
     database = Database()
     scraper = OzonScraper(database)
     
+    secret_key = ''.join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(32))
+    
     try:
         # Initialize Telegram bot
-        tgwrapper = await create_telegram_wrapper(database)
+        tgwrapper = await create_telegram_wrapper(database, secret_key)
         await tgwrapper.start()
         logger.info("Telegram bot started successfully")
     except Exception as e:
@@ -36,6 +48,7 @@ async def lifespan(app: FastAPI):
     app.state.database = database
     app.state.scraper = scraper
     app.state.tgwrapper = tgwrapper
+    app.state.secret_key = secret_key
     
     yield
     
@@ -47,9 +60,30 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error stopping Telegram bot: {e}")
 
 app = FastAPI(lifespan=lifespan)
+            
+async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        if token.scheme != "Bearer":
+            raise credentials_exception
+        payload = jwt.decode(token.credentials, app.state.secret_key, algorithms=[TOKEN_ENCRYPTION_ALGORITHM])
+        user_id = payload.get("id")
+        if user_id is None:
+            raise credentials_exception
+        return user_id
+    except InvalidTokenError:
+        raise credentials_exception
+
 
 @app.get("/user/{tid}")
-async def get_user(tid) -> UserResponse | ErrorResponse:
+async def get_user(tid: str, user_tid: Annotated[str, Depends(validate_token)]) -> UserResponse | ErrorResponse:
+    if user_tid != tid:
+        return ErrorResponse(message="Unauthorized to perform actions on other users")
+
     user = app.state.database.get_user(tid)
 
     if user == None:
@@ -62,7 +96,10 @@ async def get_user(tid) -> UserResponse | ErrorResponse:
     )
 
 @app.post("/tracking")
-async def add_tracking(tracking: CreateTrackingModel) -> TrackedProductModel | ErrorResponse:
+async def add_tracking(tracking: CreateTrackingModel, user_tid: Annotated[str, Depends(validate_token)]) -> TrackedProductModel | ErrorResponse:
+    if user_tid != tracking.user_tid:
+        return ErrorResponse(message="Unauthorized to perform actions on other users")
+        
     product = app.state.scraper.scrape_product(tracking.product_sku, tracking.product_url)
     
     if product == None:
@@ -85,7 +122,10 @@ async def add_tracking(tracking: CreateTrackingModel) -> TrackedProductModel | E
     return product
 
 @app.put("/tracking")
-async def update_threshold(tracking: TrackingModel) -> StatusResponse:
+async def update_threshold(tracking: TrackingModel, user_tid: Annotated[str, Depends(validate_token)]) -> StatusResponse:
+    if user_tid != tracking.user_tid:
+        return ErrorResponse(message="Unauthorized to perform actions on other users")
+
     success = app.state.database.add_tracking(tracking)
     
     if not success:
@@ -94,7 +134,10 @@ async def update_threshold(tracking: TrackingModel) -> StatusResponse:
     return StatusResponse(success=True, message="")
 
 @app.delete("/tracking")
-async def delete_tracking(tracking: TrackingModel) -> StatusResponse:
+async def delete_tracking(tracking: TrackingModel, user_tid: Annotated[str, Depends(validate_token)]) -> StatusResponse:
+    if user_tid != tracking.user_tid:
+        return ErrorResponse(message="Unauthorized to perform actions on other users")
+
     success = app.state.database.delete_tracking(tracking)
     
     if not success:
@@ -103,7 +146,7 @@ async def delete_tracking(tracking: TrackingModel) -> StatusResponse:
     return StatusResponse(success=True, message="")
     
 @app.get("/product/{product_id}/history")
-async def get_product_history(product_id: str) -> ProductHistoryResponse | ErrorResponse:
+async def get_product_history(product_id: str, user_tid: Annotated[str, Depends(validate_token)]) -> ProductHistoryResponse | ErrorResponse:
     history = app.state.database.get_price_history(product_id)
     
     if history == None:
