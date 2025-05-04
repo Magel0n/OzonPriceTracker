@@ -51,8 +51,8 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/user/{tid}")
 async def get_user(tid) -> UserResponse | ErrorResponse:
     user = app.state.database.get_user(tid)
-    
-    if user is None:
+
+    if user == None:
         return ErrorResponse(message="Could not retrieve user info")
     
     products = app.state.database.get_tracked_products(tid)
@@ -66,12 +66,12 @@ async def add_tracking(tracking: CreateTrackingModel) -> TrackedProductModel | E
     product = app.state.scraper.scrape_product(tracking.product_sku, tracking.product_url)
     
     if product == None:
-        return ErrorResponse(message="Product could not be scraped")
+        return ErrorResponse("Product could not be scraped")
         
     id = app.state.database.add_product(product)
     
     if id == None:
-        return ErrorResponse(message="Database could not be inserted into")
+        return ErrorResponse("Database could not be inserted into")
     
     product.id = id
     
@@ -80,7 +80,7 @@ async def add_tracking(tracking: CreateTrackingModel) -> TrackedProductModel | E
     success = app.state.database.add_tracking(TrackingModel(tracking.user_tid, id, default_tracking_price))
     
     if not success:
-        return ErrorResponse(message="Error while adding tracking to database")
+        return ErrorResponse("Error while adding tracking to database")
         
     return product
 
@@ -95,7 +95,6 @@ async def update_threshold(tracking: TrackingModel) -> StatusResponse:
 
 @app.delete("/tracking")
 async def delete_tracking(tracking: TrackingModel) -> StatusResponse:
-    
     success = app.state.database.delete_tracking(tracking)
     
     if not success:
@@ -108,9 +107,9 @@ async def get_product_history(product_id: str) -> ProductHistoryResponse | Error
     history = app.state.database.get_price_history(product_id)
     
     if history == None:
-        return ErrorResponse(message="Could not get price history from database")
+        return ErrorResponse("Could not get price history from database")
     
-    return ProductHistoryResponse(history=history)
+    return ProductHistoryResponse(history)
     
 
 if __name__ == "__main__":
