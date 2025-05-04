@@ -130,6 +130,24 @@ class Database:
         self.conn.commit()
         return True
     
+    def get_user(self, tid: int) -> UserModel | None:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        SELECT * FROM users
+        WHERE telegram_id = ?;
+        """, (tid,))
+        result = cursor.fetchall()
+        def lmb(x):
+            return UserModel(tid=x[0],
+                             name=x[1],
+                             username=x[2],
+                             user_pfp=x[3])
+        if not result:
+            return None
+        else:
+            return lmb(result[0])
+            
+    
     # Should return list of products that a specific user has tracked
     def get_tracked_products(self, user_tid: str) -> list[TrackedProductModel] | None:
         cursor = self.conn.cursor()
