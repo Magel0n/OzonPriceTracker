@@ -168,6 +168,23 @@ class Database:
                 ret[user] = ret[user] + p
         [lmb(prod) for prod in product_ids]
         
+    def get_products(self) -> list[TrackedProductModel]:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        SELECT * FROM products;
+        """)
+        results = cursor.fetchall()
+        def lmb(x) -> TrackedProductModel:
+            return TrackedProductModel(id=None,
+                                       url=x[1],
+                                       sku=x[2],
+                                       name=x[3],
+                                       price=x[4],
+                                       seller=x[5],
+                                       tracking_price=None)
+        results = [lmb(result) for result in results]
+        return results
+        
     # Add updated price information to history table, you may not check if the price has changed 
     def add_to_price_history(self, product_ids: list[str], time: int) -> bool:
         cursor = self.conn.cursor()
