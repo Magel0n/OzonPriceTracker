@@ -1,14 +1,17 @@
 import os
 import uvicorn
 from api_models import *
+from logging import getLogger
 from fastapi import FastAPI
 from database import Database
 from tgwrapper import TelegramWrapper
 from scraper import OzonScraper
 
-database: Database = None
-tgwrapper: TelegramWrapper = None
-scraper: OzonScraper = None
+database: Database = Database()
+tgwrapper: TelegramWrapper = TelegramWrapper(database)
+scraper: OzonScraper = OzonScraper(database)
+
+tgwrapper.start()
 
 api_url = os.environ.get("API_URL", "0.0.0.0")
 api_port = int(os.environ.get("API_PORT", "12345"))
@@ -17,8 +20,7 @@ app = FastAPI()
 
 @app.get("/user/{tid}")
 async def get_user(tid) -> UserResponse | ErrorResponse:
-    user = tgwrapper.get_user_info(tid)
-    products = database.get_tracked_products(tid)
+    user = database.get_user(tid)
     
     if user == None:
         return ErrorResponse("Could not retrieve user info")
@@ -79,25 +81,10 @@ async def get_product_history(product_id: str) -> ProductHistoryResponse | Error
     return ProductHistoryResponse(history)
     
 
-def start_server(
-    database_obj: Database,
-    tgwrapper_obj: TelegramWrapper,
-    scraper_obj: OzonScraper):
-    
-    database = database_obj
-    tgwrapper = tgwrapper_obj
-    scraper = scraper_obj
-
+if __name__ == "__main__":
     uvicorn.run(
         "api:app",
         host=api_url,
         port=api_port,
         log_level="debug",
     )
-
-if __name__ == "__main__":
-    database = Database()
-    tgwrapper = TelegramWrapper()
-    scraper = OzonScraper(database)
-
-    start_server(database, tgwrapper, scraper)

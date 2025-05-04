@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from .api_models import UserModel, TrackedProductModel, TrackingModel
+from api_models import *
 
 class Database:
     conn: sqlite3.Connection
@@ -212,6 +212,17 @@ class Database:
         """, (product_id,))
         ret = [(result[0], result[1]) for result in cursor.fetchall()]
         return sorted(ret, key=lambda x: x[1])
+    
+    def delete_tracking(self, tracking_info: TrackingModel) -> bool:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        DELETE FROM tracking               
+        WHERE telegram_id = ? AND product_id = ?;
+        """, (tracking_info.user_tid, tracking_info.product_id))
+        cursor.fetchall()
+        
+        self.conn.commit()
+        return True
     
     def reset(self):
         cursor = self.conn.cursor()
