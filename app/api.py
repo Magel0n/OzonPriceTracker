@@ -11,7 +11,7 @@ database: Database = Database()
 tgwrapper: TelegramWrapper = TelegramWrapper(database)
 scraper: OzonScraper = OzonScraper(database)
 
-#tgwrapper.start()
+tgwrapper.start()
 
 api_url = os.environ.get("API_URL", "0.0.0.0")
 api_port = int(os.environ.get("API_PORT", "12345"))
@@ -23,7 +23,7 @@ async def get_user(tid) -> UserResponse | ErrorResponse:
     user = database.get_user(tid)
     
     if user == None:
-        return ErrorResponse(message="Could not retrieve user info")
+        return ErrorResponse("Could not retrieve user info")
     return UserResponse(
         user = user,
         tracked_products = products
@@ -34,12 +34,12 @@ async def add_tracking(tracking: CreateTrackingModel) -> TrackedProductModel | E
     product = scraper.scrape_product(tracking.product_sku, tracking.product_url)
     
     if product == None:
-        return ErrorResponse(message="Product could not be scraped")
+        return ErrorResponse("Product could not be scraped")
         
     id = database.add_product(product)
     
     if id == None:
-        return ErrorResponse(message="Database could not be inserted into")
+        return ErrorResponse("Database could not be inserted into")
     
     product.id = id
     
@@ -48,7 +48,7 @@ async def add_tracking(tracking: CreateTrackingModel) -> TrackedProductModel | E
     success = database.add_tracking(TrackingModel(tracking.user_tid, id, default_tracking_price))
     
     if not success:
-        return ErrorResponse(message="Error while adding tracking to database")
+        return ErrorResponse("Error while adding tracking to database")
         
     return product
 
@@ -57,28 +57,28 @@ async def update_threshold(tracking: TrackingModel) -> StatusResponse:
     success = database.add_tracking(tracking)
     
     if not success:
-        return StatusResponse(success=false, message="Error while adding tracking to database")
+        return StatusResponse(false, "Error while adding tracking to database")
         
-    return StatusResponse(success=true, message="")
+    return StatusResponse(true, "")
 
 @app.delete("/tracking")
 async def delete_tracking(tracking: TrackingModel) -> StatusResponse:
     
-    success = database.delete_tracking(tracking)
+    # success = database.add_tracking(tracking)
     
-    if not success:
-        return StatusResponse(false, "Error while deleting tracking from database")
+    #if not success:
+    #    return StatusResponse(false, "Error while adding tracking to database")
         
-    return StatusResponse(success=false, message="i do not do anything yet cuz i forgor to add to disdoc")
+    return StatusResponse(false, "i do not do anything yet cuz i forgor to add to disdoc")
     
 @app.get("/product/{product_id}/history")
 async def get_product_history(product_id: str) -> ProductHistoryResponse | ErrorResponse:
     history = database.get_price_history(product_id)
     
     if history == None:
-        return ErrorResponse(message="Could not get price history from database")
+        return ErrorResponse("Could not get price history from database")
     
-    return ProductHistoryResponse(history=history)
+    return ProductHistoryResponse(history)
     
 
 if __name__ == "__main__":
