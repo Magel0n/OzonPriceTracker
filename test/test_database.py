@@ -1,5 +1,5 @@
-from app.database import Database
-from app.api_models import UserModel, TrackedProductModel, TrackingModel
+from database import Database
+from api_models import *
 
 
 class TestDatabase:
