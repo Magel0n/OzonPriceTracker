@@ -2,12 +2,8 @@
 **/__pycache__
 secrets.env
 
-.\secrets.env
-
 # For selenium
 app/downloaded_files/*
 downloaded_files/*
-.env
-downloaded_files/*
-app/downloaded_files/*
+**.env
 app/failure.html
