@@ -32,6 +32,18 @@ class TelegramWrapper:
         self.dp.message(Command("start"))(self._handle_start)
         self.dp.message(Command("auth"))(self._handle_auth)
 
+        self._setup_bot_commands()
+
+    def _setup_bot_commands(self):
+        """Set up persistent menu buttons"""
+        self.commands_menu = types.ReplyKeyboardMarkup(
+            keyboard=[
+                [types.KeyboardButton(text="/start"), types.KeyboardButton(text="/auth")],
+            ],
+            resize_keyboard=True,
+            persistent=True  # Stays visible until removed
+        )
+
     async def verify_connection(self) -> bool:
         """Verify the bot can connect to Telegram"""
         try:
@@ -95,14 +107,15 @@ class TelegramWrapper:
         """Handle /start command"""
         welcome_text = (
             "Welcome to Price Tracker Bot!\n\n"
-            "I can help you track product prices from Ozon and notify you when prices drop.\n\n"
-            "Use /auth to authenticate and link your account\n"
-            "You'll receive notifications when prices drop below your specified limits."
+            "Use the buttons below to navigate:\n"
+            "/start - Show this welcome message\n"
+            "/auth - Authenticate your account"
         )
+    
         try:
-            await self.bot.send_message(
-                chat_id=message.chat.id,
-                text=welcome_text
+            await message.answer(
+                text=welcome_text,
+                reply_markup=self.commands_menu  # Attach persistent menu
             )
         except Exception as e:
             self.logger.error(f"Error sending start message: {e}")
@@ -136,13 +149,11 @@ class TelegramWrapper:
             streamlit_link = f"https://your-streamlit-app.com/session?token={token}"
             auth_message = (
                 "Authentication successful!\n\n"
-                f"Your session token: {token}\n"
-                f"Expires at: {expires.strftime('%Y-%m-%d %H:%M')}\n\n"
                 f"Open dashboard: {streamlit_link}"
             )
-            await self.bot.send_message(
-                chat_id=message.chat.id,
-                text=auth_message
+            await message.answer(
+                text=auth_message,
+                reply_markup=self.commands_menu  # Keep menu visible after auth
             )
         except Exception as e:
             self.logger.error(f"Error in auth handler: {e}")
@@ -259,30 +270,3 @@ async def create_telegram_wrapper(database: Database) -> TelegramWrapper:
     if not await wrapper.verify_connection():
         raise RuntimeError("Failed to initialize Telegram bot - invalid token or connection issues")
     return wrapper
-
-async def main():
-    """Main async entry point"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    try:
-        db = Database()
-        wrapper = await create_wrapper(db)
-        
-        await wrapper.start()
-        
-        # Keep running until interrupted
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        await wrapper.stop()
-    except Exception as e:
-        logging.error(f"Fatal error: {e}")
-    finally:
-        if 'wrapper' in locals():
-            await wrapper.stop()
-
-if __name__ == '__main__':
-    asyncio.run(main())
