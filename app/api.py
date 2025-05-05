@@ -81,12 +81,12 @@ async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
 
 @app.get("/profile")
 async def get_user(user_tid: Annotated[str, Depends(validate_token)]) -> UserResponse | ErrorResponse:
-    user = app.state.database.get_user(tid)
+    user = app.state.database.get_user(user_tid)
 
     if user == None:
         return ErrorResponse(message="Could not retrieve user info")
     
-    products = app.state.database.get_tracked_products(tid)
+    products = app.state.database.get_tracked_products(user_tid)
     return UserResponse(
         user=user,
         tracked_products=products

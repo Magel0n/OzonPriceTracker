@@ -56,7 +56,7 @@ def display_user_info():
     user = data["user"]
     tracked_products = data["tracked_products"]
 
-    user_tid = user["id"]
+    user_tid = user["tid"]
 
     # CSS classes
     st.markdown(
@@ -297,7 +297,7 @@ def main():
         )
 
         if page == "📦 My Products":
-            display_user_info(user_tid)
+            display_user_info()
         elif page == "➕ Add Product":
             add_product_form(user_tid)
         elif page == "🔍 Search Products":
