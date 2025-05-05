@@ -6,10 +6,13 @@ from api_models import TrackedProductModel
 from database import Database
 from tgwrapper import TelegramWrapper
 
+
 class OzonScraper:
     database: Database
 
-    def __init__(self, database: Database, tgwrapper: TelegramWrapper, headlessness: bool = False):
+    def __init__(self, database: Database, tgwrapper: TelegramWrapper, headlessness: bool = False,
+                 keepfailure: bool = False):
+        self.keepFailure = keepfailure
         self.database = database
         self.headlessness = headlessness
         self.tgwrapper = tgwrapper
@@ -37,12 +40,8 @@ class OzonScraper:
 
             product.price = newPrice
 
-
         self.database.update_products(products)
         usersToSend = self.database.get_users_by_products(productsToSend)
-
-
-
 
     # Should return product info by sku or url
     # use sku or url to find everything else
@@ -62,6 +61,8 @@ class OzonScraper:
         sellerLasting = None
         if correctUrl is None:
             return None  # Failure to parse url
+
+        # print(correctUrl)  # TODO fix url as sku possibility
 
         nameLasting, priceLasting, sellerLasting = self._get_info_for_product(correctUrl)
         name = None
@@ -134,24 +135,60 @@ class OzonScraper:
         try:
             with seleniumbase.SB(undetectable=True, headless=self.headlessness) as sb:
                 sb.uc_open_with_reconnect(url, 4)
-                name = sb.find_elements(".m1q_28")[0].text
+                for i in range(3):
+                    name = sb.find_elements(".m1q_28")
+                    if not name:
+                        name = sb.find_elements(".m1q_28")
+
+                    if not name:
+                        if self.keepFailure:
+                            sb.save_page_source("failureName")
+                        # print("No name found")
+                        name = None
+                    if name is not None:
+                        name = name[0].text
+                        break
+
+                    sb.sleep(1)
                 # print(name)
 
                 for i in range(3):
                     seller = sb.find_elements(".tsCompactControl500Medium > span:nth-child(1)")
                     if not seller:
                         seller = sb.find_elements("div.tsCompactControl500Medium > span:nth-child(1)")
+                    if not seller:
+                        seller = sb.find_elements("div.sk4_28:nth-child(2) > a:nth-child(1)")
+                    if not seller:
+                        seller = sb.find_elements(".m5p_28")
 
                     if not seller:
-                        # sb.save_page_source("failure")
+                        if self.keepFailure:
+                            sb.save_page_source("failureSeller")
                         # print("No seller found")
                         seller = None
                     if seller is not None:
                         seller = seller[0].text
                         break
 
-                    seller = sb.sleep(1)  # Does not improve much
+                    sb.sleep(1)  # Does not improve much
                 # print(seller)
+
+                for i in range(3):
+                    price = sb.find_elements(".m5p_28")
+                    if not price:
+                        price = sb.find_elements("div.m5p_28")
+
+                    if not price:
+                        if self.keepFailure:
+                            sb.save_page_source("failurePrice")
+                        # print("No price found")
+                        price = None
+                    if price is not None:
+                        price = price[0].text
+                        price = int("".join(price[:-1].split("\u2009")))
+                        break
+
+                    sb.sleep(1)
 
                 price = sb.find_elements(".m5p_28")[0].text
                 # print(price)
@@ -160,6 +197,7 @@ class OzonScraper:
             return name, price, seller
         except Exception as e:
             print(e)
+            return None, None, None
 
     def _check_url(self, url: str) -> str | None:
         """
@@ -199,7 +237,7 @@ class OzonScraper:
 
 
 if __name__ == '__main__':
-    scraper = OzonScraper("")
+    scraper = OzonScraper("", "", headlessness=True, keepfailure=True)
 
     url1 = "https://www.ozon.ru/product/spalnyy-meshok-rsp-sleep-450-big-225-90-sm-molniya-sprava-1711093999/"
     url2 = "https://www.ozon.ru/product/palatka-4-mestnaya-2031340268/"
@@ -209,7 +247,8 @@ if __name__ == '__main__':
     url11 = "https://www.ozon.ru/product/spalnyy-meshok-turisticheskiy-golden-shark-elbe-450-xl-pravaya-molniya-1950697799/?at=jYtZoW3qgfRmpMwgC6NjPA5c4Q2j7EtXY392WU77N8wn"
 
     url = scraper._check_url(url1)
-    print(scraper.scrape_product(url1))
-    print(scraper.scrape_product(url2))
-    print(scraper.scrape_product(url3))
-    print(scraper.scrape_product(url11))
+    print(scraper._check_url(url1))
+    print(scraper.scrape_product(url=url1))
+    print(scraper.scrape_product(url=url2))
+    print(scraper.scrape_product(url=url3))
+    print(scraper.scrape_product(url=url11))
