@@ -1,3 +1,9 @@
 **.db
 **/__pycache__
 secrets.env
+
+# For selenium
+app/downloaded_files/*
+downloaded_files/*
+**.env
+app/failure.html

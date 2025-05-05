@@ -1,8 +1,9 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 import asyncio
 import logging
+import jwt
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -11,10 +12,15 @@ from aiogram.client.default import DefaultBotProperties
 from api_models import UserModel, TrackedProductModel
 from database import Database
 
+TOKEN_ENCRYPTION_ALGORITHM = os.environ.get("TOKEN_ENCRYPTION_ALGORITHM", "HS256")
+TOKEN_EXPIRATION_MINUTES = int(os.environ.get("TOKEN_EXPIRATION_MINUTES", "30"))
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8501")
+
 class TelegramWrapper:
-    def __init__(self, database: Database):
+    def __init__(self, database: Database, secret_key: str):
         self.logger = logging.getLogger(__name__)
         token = os.getenv('TG_BOT_TOKEN')
+        
         if not token:
             raise ValueError("TG_BOT_TOKEN environment variable not set")
             
@@ -24,6 +30,7 @@ class TelegramWrapper:
         )
         self.dp = Dispatcher()
         self.db = database
+        self.secret_key = secret_key
         self.user_sessions: Dict[int, dict] = {}
         self._polling_task = None
         self._test_mode = os.getenv('TEST_MODE') == '1'
@@ -138,15 +145,17 @@ class TelegramWrapper:
                     text="Failed to authenticate. Please try again."
                 )
                 return
+                
+            expires = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRATION_MINUTES)
             
-            token = f"streamlit_{user_id}_{datetime.now().timestamp()}"
-            expires = datetime.now() + timedelta(hours=1)
-            self.user_sessions[int(user_id)] = {
-                'token': token,
-                'expires': expires
+            token_data = {
+                "id": user_id,
+                "exp": expires
             }
             
-            streamlit_link = f"https://your-streamlit-app.com/session?token={token}"
+            token = jwt.encode(token_data, self.secret_key, algorithm=TOKEN_ENCRYPTION_ALGORITHM)
+            
+            streamlit_link = f"{APP_BASE_URL}/?token={token}"
             auth_message = (
                 "Authentication successful!\n\n"
                 f"Open dashboard: {streamlit_link}"
@@ -264,9 +273,9 @@ class TelegramWrapper:
             self.logger.error(f"Test failed: {e}")
             return False
 
-async def create_telegram_wrapper(database: Database) -> TelegramWrapper:
+async def create_telegram_wrapper(database: Database, secret_key: str) -> TelegramWrapper:
     """Factory function to create and verify TelegramWrapper"""
-    wrapper = TelegramWrapper(database)
+    wrapper = TelegramWrapper(database, secret_key)
     if not await wrapper.verify_connection():
         raise RuntimeError("Failed to initialize Telegram bot - invalid token or connection issues")
     return wrapper
