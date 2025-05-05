@@ -80,9 +80,9 @@ async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
         raise credentials_exception
 
 
-@app.get("/userId")
-async def get_user(user_tid: Annotated[int, Depends(validate_token)]) -> UserIdResponse:
-    return UserIdResponse(id=user_tid)
+@app.get("/verify-token")
+async def verify_token(user_tid: Annotated[int, Depends(validate_token)]) -> VerifyTokenResponse:
+    return VerifyTokenResponse(user_tid=user_tid)
 
 
 @app.get("/profile")
@@ -154,7 +154,7 @@ async def delete_tracking(tracking: TrackingModel, user_tid: Annotated[int, Depe
     return StatusResponse(success=True, message="")
     
 @app.get("/product/{product_id}/history")
-async def get_product_history(product_id: str, user_tid: Annotated[int, Depends(validate_token)]) -> ProductHistoryResponse:
+async def get_product_history(product_id: int, user_tid: Annotated[int, Depends(validate_token)]) -> ProductHistoryResponse:
     history = app.state.database.get_price_history(product_id)
     
     if history == None:

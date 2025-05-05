@@ -150,7 +150,7 @@ class Database:
             
     
     # Should return list of products that a specific user has tracked
-    def get_tracked_products(self, user_tid: str) -> list[TrackedProductModel] | None:
+    def get_tracked_products(self, user_tid: int) -> list[TrackedProductModel] | None:
         cursor = self.conn.cursor()
         cursor.execute("""
         SELECT product_id FROM tracking
@@ -175,7 +175,7 @@ class Database:
         return ret
     
     # Should return dictionary of users that track the products listed
-    def get_users_by_products(self, product_ids: list[TrackedProductModel]) -> dict[str, list[TrackedProductModel]] | None:
+    def get_users_by_products(self, product_ids: list[TrackedProductModel]) -> dict[int, list[TrackedProductModel]] | None:
         cursor = self.conn.cursor()
         ret = dict()
         def lmb(p: TrackedProductModel):
@@ -207,7 +207,7 @@ class Database:
         return results
         
     # Add updated price information to history table, you may not check if the price has changed 
-    def add_to_price_history(self, product_ids: list[str], time: int) -> bool:
+    def add_to_price_history(self, product_ids: list[int], time: int) -> bool:
         cursor = self.conn.cursor()
         def lmb(p):
             cursor.execute("""
@@ -225,7 +225,7 @@ class Database:
         return True
         
     # Get price history of product by its id, sort by timestamp
-    def get_price_history(self, product_id: str) -> list[tuple[int, str]] | None:
+    def get_price_history(self, product_id: int) -> list[tuple[int, str]] | None:
         cursor = self.conn.cursor()
         cursor.execute("""
         SELECT price, time FROM history

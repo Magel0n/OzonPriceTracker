@@ -19,7 +19,7 @@ class CreateTrackingModel(BaseModel):
     product_sku: str | None = None
 
 class TrackedProductModel(BaseModel):
-    id: str | None
+    id: int | None
     url: str
     sku: str
     name: str
@@ -29,15 +29,15 @@ class TrackedProductModel(BaseModel):
     
 class TrackingModel(BaseModel):
     user_tid: int
-    product_id: str
+    product_id: int
     new_price: str | None
 
 class UserResponse(BaseModel):
     user: UserModel
     tracked_products: list[TrackedProductModel]
 
-class UserIdResponse(BaseModel):
-    id: int
+class VerifyTokenResponse(BaseModel):
+    user_tid: int
 
 class ProductHistoryResponse(BaseModel):
     # Unix epoch seconds to price in string

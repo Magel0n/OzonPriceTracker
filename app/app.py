@@ -55,10 +55,12 @@ def make_api_request(endpoint: str, method: str = "GET", data: Optional[dict] = 
 
 def check_auth():
     query_params = st.query_params.to_dict()
+    print(query_params)
     if "token" in query_params and not st.session_state.auth_token:
         st.session_state.auth_token = query_params["token"]
         # Verify token with backend
         data, error = make_api_request("/verify-token")
+        print(data, error)
         if error:
             st.session_state.auth_token = None
             return False
@@ -123,16 +125,16 @@ def display_user_info():
                     st.markdown(f"**Alert Threshold:** ₽{product['tracking_price']}")
 
                 with col2:
-                    with st.form(key=f"threshold_{product['product_id']}"):
+                    with st.form(key=f"threshold_{product['id']}"):
                         new_threshold = st.text_input(
                             "Update Threshold",
                             value=product["tracking_price"],
-                            key=f"input_{product['product_id']}"
+                            key=f"input_{product['id']}"
                         )
                         if st.form_submit_button("💾 Save"):
                             update_data = {
                                 "user_tid": st.session_state.user_tid,
-                                "product_id": product["product_id"],
+                                "product_id": product["id"],
                                 "new_price": new_threshold
                             }
                             _, error = make_api_request("/tracking", "PUT", update_data)
@@ -142,10 +144,10 @@ def display_user_info():
                                 st.success("Threshold updated!")
                                 st.rerun()
 
-                    if st.button("🗑️ Stop Tracking", key=f"delete_{product['product_id']}"):
+                    if st.button("🗑️ Stop Tracking", key=f"delete_{product['id']}"):
                         delete_data = {
                             "user_tid": st.session_state.user_tid,
-                            "product_id": product["product_id"]
+                            "product_id": product["id"]
                         }
                         _, error = make_api_request("/tracking", "DELETE", delete_data)
                         if error:
@@ -156,7 +158,7 @@ def display_user_info():
 
                 # Price history visualization
                 st.subheader("📈 Price History")
-                history_data, error = make_api_request(f"/product/{product['product_id']}/history")
+                history_data, error = make_api_request(f"/product/{product['id']}/history")
                 if error:
                     st.warning(f"Couldn't load history: {error}")
                 elif history_data["history"]:
@@ -219,7 +221,7 @@ def add_product_form(user_tid: str):
                 # Set threshold after adding
                 update_data = {
                     "user_tid": user_tid,
-                    "product_id": response["product_id"],
+                    "product_id": response["id"],
                     "new_price": price_threshold
                 }
                 _, error = make_api_request("/tracking", "PUT", update_data)
