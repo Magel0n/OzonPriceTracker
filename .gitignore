@@ -7,4 +7,7 @@ secrets.env
 # For selenium
 app/downloaded_files/*
 downloaded_files/*
+.env
+downloaded_files/*
+app/downloaded_files/*
 app/failure.html
