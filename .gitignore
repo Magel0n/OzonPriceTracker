@@ -1,3 +1,8 @@
 **.db
 **/__pycache__
 secrets.env
+
+.env
+downloaded_files/*
+app/downloaded_files/*
+app/failure.html
