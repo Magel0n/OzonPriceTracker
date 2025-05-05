@@ -4,19 +4,45 @@ import seleniumbase
 
 from api_models import TrackedProductModel
 from database import Database
-
+from tgwrapper import TelegramWrapper
 
 class OzonScraper:
     database: Database
 
-    def __init__(self, database: Database):
+    def __init__(self, database: Database, tgwrapper: TelegramWrapper, headlessness: bool = False):
         self.database = database
+        self.headlessness = headlessness
+        self.tgwrapper = tgwrapper
 
     # Should run every so often, implementation and other details are up to you lmao
     # Use Database.get_products, Database.update_products, Database.get_users_by_products
     # TelegramWrapper.push_notifications, Database.add_to_price_history
     def update_offers_job(self) -> None:
-        pass
+        products = self.database.get_products()
+        urls = []
+        for product in products:
+            if product.url == "https://www.ozon.ru/product/" + product.sku:
+                urls.append(product.sku)
+            else:
+                urls.append(product.url)
+
+        newPrices = self._get_info_for_products(urls)
+        productsToSend = []
+        for product, newPrice in zip(products, newPrices):
+            if newPrice is None:
+                continue
+
+            if product.price < newPrice:
+                productsToSend.append(product)
+
+            product.price = newPrice
+
+
+        self.database.update_products(products)
+        usersToSend = self.database.get_users_by_products(productsToSend)
+
+
+
 
     # Should return product info by sku or url
     # use sku or url to find everything else
@@ -65,10 +91,30 @@ class OzonScraper:
         if url is None:
             url = correctUrl
 
-        return TrackedProductModel(id=None, url=url, sku=sku, name=nameLasting, price=priceLasting,
+        return TrackedProductModel(id=None, url=url, sku=sku, name=nameLasting, price=str(priceLasting),
                                    seller=sellerLasting, tracking_price=None)
 
-
+    def _get_info_for_products(self, urls: list[str]) -> list[int | None]:
+        prices = []
+        try:
+            with seleniumbase.SB(undetectable=True, headless=self.headlessness) as sb:
+                for url in urls:
+                    sb.uc_open_with_reconnect(url, 4)
+                    price = sb.find_elements(".m1q_28")
+                    i = 0
+                    while not price:
+                        if i == 3:
+                            break
+                        price = sb.find_elements(".m1q_28")
+                        sb.sleep(1)
+                        i += 1
+                    price = price[0].text
+                    price = int("".join(price[:-1].split("\u2009")))
+                    prices.append(price)
+                return prices
+        except Exception as e:
+            print(e)
+            return [None] * len(urls)
 
     def _get_info_for_product(self, url: str) -> (str | None, int | None, str | None):
         """
@@ -86,7 +132,7 @@ class OzonScraper:
         price = None
         seller = None
         try:
-            with seleniumbase.SB(undetectable=True, headless=False) as sb:
+            with seleniumbase.SB(undetectable=True, headless=self.headlessness) as sb:
                 sb.uc_open_with_reconnect(url, 4)
                 name = sb.find_elements(".m1q_28")[0].text
                 # print(name)

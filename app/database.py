@@ -30,7 +30,8 @@ class Database:
             sku TEXT NOT NULL,
             name TEXT NOT NULL,
             price TEXT NOT NULL,
-            seller TEXT NOT NULL
+            seller TEXT NOT NULL,
+            tracking_price
         );""")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tracking (
@@ -75,10 +76,10 @@ class Database:
         def lmb(p: TrackedProductModel):
             cursor.execute("""
             UPDATE products
-            SET url = ?, sku = ?, name = ?, price = ?, seller = ?
+            SET url = ?, sku = ?, name = ?, price = ?, seller = ?, tracking_price = ?
             WHERE product_id = ?
             RETURNING *;
-            """, (p.url, p.sku, p.name, p.price, p.seller, p.id))
+            """, (p.url, p.sku, p.name, p.price, p.seller, p.id, p.tracking_price))
             return len(cursor.fetchall())
         [lmb(prod) for prod in products]
 
@@ -96,11 +97,11 @@ class Database:
         ret = cursor.fetchall()
         if not cursor.fetchall():
             cursor.execute("""
-            INSERT INTO products (url, sku, name, price, seller)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO products (url, sku, name, price, seller, tracking_price)
+            VALUES (?, ?, ?, ?, ?, ?)
             RETURNING product_id;
             """, (product.url, product.sku, product.name, 
-                  product.price, product.seller))
+                  product.price, product.seller, product.tracking_price))
             ret = cursor.fetchall()[0][0]
             self.conn.commit()
 
@@ -184,8 +185,10 @@ class Database:
             """, (p,))
             for user in cursor.fetchall():
                 ret[user] = ret[user] + p
-        [lmb(prod) for prod in product_ids]
+        results = [lmb(prod) for prod in product_ids]
+        return results
         
+    # gets ALL products
     def get_products(self) -> list[TrackedProductModel]:
         cursor = self.conn.cursor()
         cursor.execute("""
