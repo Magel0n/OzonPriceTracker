@@ -138,32 +138,58 @@ class TelegramWrapper:
                     text="Could not retrieve your Telegram profile information."
                 )
                 return
-            
+        
             if not self.db.login_user(user):
                 await self.bot.send_message(
                     chat_id=message.chat.id,
                     text="Failed to authenticate. Please try again."
                 )
                 return
-                
-            expires = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRATION_MINUTES)
             
+            expires = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRATION_MINUTES)
+        
             token_data = {
                 "id": user_id,
                 "exp": expires
             }
-            
+        
             token = jwt.encode(token_data, self.secret_key, algorithm=TOKEN_ENCRYPTION_ALGORITHM)
-            
+        
             streamlit_link = f"{APP_BASE_URL}/?token={token}"
-            auth_message = (
-                "Authentication successful!\n\n"
-                f"Open dashboard: {streamlit_link}"
-            )
-            await message.answer(
-                text=auth_message,
-                reply_markup=self.commands_menu  # Keep menu visible after auth
-            )
+        
+            # Check if the URL is valid for Telegram (HTTPS with proper domain)
+            if APP_BASE_URL.startswith(('http://localhost', 'http://127.0.0.1')):
+                # For local development, send the link as text
+                auth_message = (
+                    "Authentication successful!\n\n"
+                    "Since you're running in local development mode, "
+                    "please manually open this link in your browser:\n\n"
+                    f"{streamlit_link}"
+                )
+                await message.answer(
+                    text=auth_message,
+                    reply_markup=self.commands_menu
+                )
+            else:
+                # For production, use the inline button
+                keyboard = types.InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [types.InlineKeyboardButton(
+                            text="Open Dashboard",
+                            url=streamlit_link
+                        )]
+                    ]
+                )
+            
+                auth_message = (
+                    "Authentication successful!\n\n"
+                    "Click the button below to open your price tracking dashboard:"
+                )
+            
+                await message.answer(
+                    text=auth_message,
+                    reply_markup=keyboard
+                )
         except Exception as e:
             self.logger.error(f"Error in auth handler: {e}")
 
