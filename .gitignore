@@ -1,6 +1,7 @@
 **.db
 **/__pycache__
 secrets.env
+./secrets.env
 
 # For selenium
 app/downloaded_files/*
