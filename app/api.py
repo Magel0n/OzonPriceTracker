@@ -74,17 +74,22 @@ async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
         user_id = payload.get("id")
         if user_id is None:
             raise credentials_exception
-        return user_id
+        return int(user_id)
     except InvalidTokenError:
         raise credentials_exception
 
 
+@app.get("/userId")
+async def get_user(user_tid: Annotated[int, Depends(validate_token)]) -> UserIdResponse:
+    return UserIdResponse(id=user_tid)
+
+
 @app.get("/profile")
-async def get_user(user_tid: Annotated[str, Depends(validate_token)]) -> UserResponse | ErrorResponse:
+async def get_user(user_tid: Annotated[int, Depends(validate_token)]) -> UserResponse:
     user = app.state.database.get_user(user_tid)
 
     if user == None:
-        return ErrorResponse(message="Could not retrieve user info")
+        raise HTTPException(status_code=500, detail="Could not find user data")
     
     products = app.state.database.get_tracked_products(user_tid)
     return UserResponse(
@@ -93,61 +98,66 @@ async def get_user(user_tid: Annotated[str, Depends(validate_token)]) -> UserRes
     )
 
 @app.post("/tracking")
-async def add_tracking(tracking: CreateTrackingModel, user_tid: Annotated[str, Depends(validate_token)]) -> TrackedProductModel | ErrorResponse:
+async def add_tracking(tracking: CreateTrackingModel, user_tid: Annotated[int, Depends(validate_token)]) -> TrackedProductModel:
+    logger.info(f"{user_tid}, {tracking.user_tid}")
     if user_tid != tracking.user_tid:
-        return ErrorResponse(message="Unauthorized to perform actions on other users")
+        raise HTTPException(status_code=403, detail="Cannot modify other user data")
         
     product = app.state.scraper.scrape_product(tracking.product_sku, tracking.product_url)
     
     if product == None:
-        return ErrorResponse("Product could not be scraped")
+        raise HTTPException(status_code=500, detail="Product could not be scraped")
         
     id = app.state.database.add_product(product)
     
     if id == None:
-        return ErrorResponse("Database could not be inserted into")
+        raise HTTPException(status_code=500, detail="Database could not be inserted into")
     
     product.id = id
     
     default_tracking_price = str(float(product.price) * 0.9)
     
-    success = app.state.database.add_tracking(TrackingModel(tracking.user_tid, id, default_tracking_price))
+    success = app.state.database.add_tracking(TrackingModel(
+        user_tid=tracking.user_tid, 
+        product_id=id, 
+        new_price=default_tracking_price
+    ))
     
     if not success:
-        return ErrorResponse("Error while adding tracking to database")
+        raise HTTPException(status_code=500, detail="Error while adding tracking to database")
         
     return product
 
 @app.put("/tracking")
-async def update_threshold(tracking: TrackingModel, user_tid: Annotated[str, Depends(validate_token)]) -> StatusResponse:
+async def update_threshold(tracking: TrackingModel, user_tid: Annotated[int, Depends(validate_token)]) -> StatusResponse:
     if user_tid != tracking.user_tid:
-        return ErrorResponse(message="Unauthorized to perform actions on other users")
+        raise HTTPException(status_code=500, detail="Unauthorized to perform actions on other users")
 
     success = app.state.database.add_tracking(tracking)
     
     if not success:
-        return StatusResponse(success=False, message="Error while adding tracking to database")
+        raise HTTPException(status_code=500, detail="Error while adding tracking to database")
         
     return StatusResponse(success=True, message="")
 
 @app.delete("/tracking")
-async def delete_tracking(tracking: TrackingModel, user_tid: Annotated[str, Depends(validate_token)]) -> StatusResponse:
+async def delete_tracking(tracking: TrackingModel, user_tid: Annotated[int, Depends(validate_token)]) -> StatusResponse:
     if user_tid != tracking.user_tid:
-        return ErrorResponse(message="Unauthorized to perform actions on other users")
+        raise HTTPException(status_code=500, detail="Unauthorized to perform actions on other users")
 
     success = app.state.database.delete_tracking(tracking)
     
     if not success:
-        return StatusResponse(success=False, message="Error while deleting tracking from database")
+        raise HTTPException(status_code=500, detail="Error while deleting tracking from database")
         
     return StatusResponse(success=True, message="")
     
 @app.get("/product/{product_id}/history")
-async def get_product_history(product_id: str, user_tid: Annotated[str, Depends(validate_token)]) -> ProductHistoryResponse | ErrorResponse:
+async def get_product_history(product_id: str, user_tid: Annotated[int, Depends(validate_token)]) -> ProductHistoryResponse:
     history = app.state.database.get_price_history(product_id)
     
     if history == None:
-        return ErrorResponse("Could not get price history from database")
+        raise HTTPException(status_code=500, detail="Could not get price history from database")
     
     return ProductHistoryResponse(history)
     

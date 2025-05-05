@@ -65,7 +65,7 @@ class OzonScraper:
         if url is None:
             url = correctUrl
 
-        return TrackedProductModel(id=None, url=url, sku=sku, name=nameLasting, price=priceLasting,
+        return TrackedProductModel(id=None, url=url, sku=sku, name=nameLasting, price=str(priceLasting),
                                    seller=sellerLasting, tracking_price=None)
 
 
@@ -86,7 +86,7 @@ class OzonScraper:
         price = None
         seller = None
         try:
-            with seleniumbase.SB(undetectable=True, headless=False) as sb:
+            with seleniumbase.SB(undetectable=True, headless=True) as sb:
                 sb.uc_open_with_reconnect(url, 4)
                 name = sb.find_elements(".m1q_28")[0].text
                 # print(name)
