@@ -7,4 +7,6 @@ secrets.env
 app/downloaded_files/*
 downloaded_files/*
 **.env
-app/failure.html
+app/failurePrice.html
+app/failureName.html
+app/failureSeller.html
