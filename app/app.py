@@ -6,9 +6,11 @@ import os
 from pathlib import Path
 from typing import Optional
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-STATIC_FILES_URL = os.getenv("STATIC_FILES_URL", "http://localhost:8000/static")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:12345")
+STATIC_FILES_URL = os.getenv("STATIC_FILES_URL", "http://localhost:12345/static")
 
+auth_token = st.query_params["token"]
+user_tid = None
 
 def load_css():
     css_file = Path(__file__).parent / "static" / "styles.css"
@@ -17,16 +19,19 @@ def load_css():
 
 
 def make_api_request(endpoint: str, method: str = "GET", data: Optional[dict] = None):
+    global auth_token
+    
     url = f"{API_BASE_URL}{endpoint}"
+    headers = {"Authorization": f"Bearer {auth_token}"}
     try:
         if method.upper() == "GET":
-            response = requests.get(url)
+            response = requests.get(url, headers=headers)
         elif method.upper() == "POST":
-            response = requests.post(url, json=data)
+            response = requests.post(url, json=data, headers=headers)
         elif method.upper() == "PUT":
-            response = requests.put(url, json=data)
+            response = requests.put(url, json=data, headers=headers)
         elif method.upper() == "DELETE":
-            response = requests.delete(url, json=data)
+            response = requests.delete(url, json=data, headers=headers)
         else:
             return None, "Invalid HTTP method"
 
@@ -39,8 +44,10 @@ def make_api_request(endpoint: str, method: str = "GET", data: Optional[dict] = 
         return None, f"Connection error: {str(e)}"
 
 
-def display_user_info(user_tid: str):
-    data, error = make_api_request(f"/user/{user_tid}")
+def display_user_info():
+    global user_tid
+    
+    data, error = make_api_request(f"/profile")
 
     if error:
         st.error(f"Failed to load user data: {error}")
@@ -48,6 +55,8 @@ def display_user_info(user_tid: str):
 
     user = data["user"]
     tracked_products = data["tracked_products"]
+
+    user_tid = user["id"]
 
     # CSS classes
     st.markdown(
@@ -264,6 +273,8 @@ def product_search(user_tid: str):
             st.warning("Please enter search criteria or adjust price range")
 
 def main():
+    global user_tid
+
     st.set_page_config(
         page_title="Product Tracker",
         page_icon="🛒",
