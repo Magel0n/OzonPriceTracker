@@ -27,6 +27,7 @@ streamlit = "==1.45.0"
 
 [tool.poetry.group.backend.dependencies]
 seleniumbase = "4.29.0"
+undetected-chromedriver = "3.5.0"
 
 [tool.poetry]
 packages = [
