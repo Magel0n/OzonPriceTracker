@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Initialize components
     database = Database()
-    scraper = OzonScraper(database)
     
     secret_key = ''.join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(32))
     
@@ -43,7 +42,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to start Telegram bot: {e}")
         raise
-    
+
+    scraper = OzonScraper(database, tgwrapper)
+
     # Store components in app state
     app.state.database = database
     app.state.scraper = scraper
