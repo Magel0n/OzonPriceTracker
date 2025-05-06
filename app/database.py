@@ -21,7 +21,7 @@ class Database:
             telegram_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             username TEXT NOT NULL,
-            user_pfp BLOB
+            user_pfp_id TEXT
         );""")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS products (

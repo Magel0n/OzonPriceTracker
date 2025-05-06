@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Dict, List, Optional
 import asyncio
 import logging
@@ -11,6 +12,8 @@ from aiogram.client.default import DefaultBotProperties
 
 from api_models import UserModel, TrackedProductModel
 from database import Database
+
+PROFILE_PICS_DIR = Path("./app/static/UserProfilePictures")
 
 TOKEN_ENCRYPTION_ALGORITHM = os.environ.get("TOKEN_ENCRYPTION_ALGORITHM", "HS256")
 TOKEN_EXPIRATION_MINUTES = int(os.environ.get("TOKEN_EXPIRATION_MINUTES", "30"))
@@ -66,15 +69,31 @@ class TelegramWrapper:
             await self.run_tests()
 
     async def get_user_info(self, user_tid: str) -> Optional[UserModel]:
-        """Get user info from Telegram"""
+        """Get user info from Telegram including profile picture file_id"""
         try:
             chat = await self.bot.get_chat(user_tid)
+        
+            # Initialize with no profile picture
+            pfp_file_id = None
+        
+            # Try to get profile photos
+            try:
+                photos = await self.bot.get_user_profile_photos(int(user_tid), limit=1)
+                if photos.photos:
+                    # Get the largest available photo size
+                    photo = photos.photos[0][-1]
+                    pfp_file_id = photo.file_id
+                
+            except Exception as photo_error:
+                self.logger.debug(f"Couldn't get profile photo for user {user_tid}: {photo_error}")
+        
             return UserModel(
                 tid=int(user_tid),
                 name=f"{chat.first_name or ''} {chat.last_name or ''}".strip(),
                 username=chat.username or "",
-                user_pfp=None
+                user_pfp=pfp_file_id  # Now storing only file_id
             )
+        
         except Exception as e:
             self.logger.error(f"Error getting user info: {e}")
             return None
@@ -128,70 +147,77 @@ class TelegramWrapper:
             self.logger.error(f"Error sending start message: {e}")
 
     async def _handle_auth(self, message: types.Message):
-        """Handle /auth command"""
+        """Handle /auth command with local profile picture saving"""
         try:
             user_id = str(message.from_user.id)
+        
+            # Get user info including profile picture file_id
             user = await self.get_user_info(user_id)
             if not user:
-                await self.bot.send_message(
-                    chat_id=message.chat.id,
-                    text="Could not retrieve your Telegram profile information."
-                )
+                await message.answer("Could not retrieve your Telegram profile information.")
                 return
         
+            # Save profile picture locally if available
+            if user.user_pfp:
+                try:
+                    # Ensure directory exists
+                    PROFILE_PICS_DIR.mkdir(parents=True, exist_ok=True)
+                
+                    # Get file path from Telegram
+                    file = await self.bot.get_file(user.user_pfp)
+                
+                    # Define local path: ./app/static/UserProfilePictures/{file_id}.jpg
+                    local_path = PROFILE_PICS_DIR / f"{user.user_pfp}.jpg"
+                
+                    # Download and save the photo
+                    await self.bot.download_file(file.file_path, destination=str(local_path))
+                
+                    self.logger.info(f"Saved profile picture for user {user_id} to {local_path}")
+                
+                except Exception as download_error:
+                    self.logger.error(f"Error saving profile picture: {download_error}")
+                    user.user_pfp = None  # Clear if download fails
+        
+            # Store user in database (with or without profile picture file_id)
             if not self.db.login_user(user):
-                await self.bot.send_message(
-                    chat_id=message.chat.id,
-                    text="Failed to authenticate. Please try again."
-                )
+                await message.answer("Failed to authenticate. Please try again.")
                 return
-            
+        
+            # Generate auth token and prepare response (same as before)
             expires = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRATION_MINUTES)
-        
-            token_data = {
-                "id": user_id,
-                "exp": expires
-            }
-        
+            token_data = {"id": user_id, "exp": expires}
             token = jwt.encode(token_data, self.secret_key, algorithm=TOKEN_ENCRYPTION_ALGORITHM)
         
             streamlit_link = f"{APP_BASE_URL}/?token={token}"
         
-            # Check if the URL is valid for Telegram (HTTPS with proper domain)
+            # Prepare response message
+            auth_message = "Authentication successful!\n\n"
+        
+            auth_message += "Click below to open your dashboard:"
+        
+            # Send response (same as before)
             if APP_BASE_URL.startswith(('http://localhost', 'http://127.0.0.1')):
-                # For local development, send the link as text
-                auth_message = (
-                    "Authentication successful!\n\n"
-                    "Since you're running in local development mode, "
-                    "please manually open this link in your browser:\n\n"
-                    f"{streamlit_link}"
-                )
                 await message.answer(
-                    text=auth_message,
+                    text=f"{auth_message}\n\n{streamlit_link}",
                     reply_markup=self.commands_menu
                 )
             else:
-                # For production, use the inline button
                 keyboard = types.InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [types.InlineKeyboardButton(
+                    inline_keyboard=[[
+                        types.InlineKeyboardButton(
                             text="Open Dashboard",
                             url=streamlit_link
-                        )]
-                    ]
+                        )
+                    ]]
                 )
-            
-                auth_message = (
-                    "Authentication successful!\n\n"
-                    "Click the button below to open your price tracking dashboard:"
-                )
-            
                 await message.answer(
                     text=auth_message,
                     reply_markup=keyboard
                 )
+            
         except Exception as e:
             self.logger.error(f"Error in auth handler: {e}")
+            await message.answer("An error occurred during authentication. Please try again.")
 
     async def start(self):
         """Start the bot asynchronously"""
