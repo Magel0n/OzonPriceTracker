@@ -45,7 +45,7 @@ class Database:
             price TEXT NOT NULL,
             time TEXT NOT NULL,
             FOREIGN KEY (product_id) REFERENCES products(product_id)
-        );""") # TODO: TIMESTAMP for time maybe. Don't know which is more complicated operation
+        );""")
         self.conn.commit()
     
     # Update user if already present

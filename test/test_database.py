@@ -1,14 +1,85 @@
-from database import Database
+from copy import deepcopy
+from pathlib import Path
 from api_models import *
+from database import Database
+from unittest import TestCase
 
 
-class TestDatabase:
+test_pfp = str(Path("test/static/user_pfp_example").read_bytes())
+
+product_instances = [
+    TrackedProductModel(id=None,
+                        url="https://ozon.ru",
+                        sku="11111",
+                        name="product name",
+                        price="13450",
+                        seller="ozonstore",
+                        tracking_price="12000"),
+    TrackedProductModel(id=None,
+                        url="https://ozon.ru",
+                        sku="22222",
+                        name="product name",
+                        price="25000",
+                        seller="ozonstore",
+                        tracking_price="20000"),
+    TrackedProductModel(id=None,
+                        url="https://ozon.ru",
+                        sku="33333",
+                        name="product name",
+                        price="31000",
+                        seller="ozonstore",
+                        tracking_price="30010"),
+    TrackedProductModel(id=None,
+                        url="https://ozon.ru",
+                        sku="44444",
+                        name="product name",
+                        price="49999",
+                        seller="ozonstore",
+                        tracking_price="45999"),
+    TrackedProductModel(id=None,
+                        url="https://ozon.ru",
+                        sku="55555",
+                        name="product name",
+                        price="55555",
+                        seller="ozonstore",
+                        tracking_price="51000"),
+    TrackedProductModel(id=None,
+                        url="https://ozon.ru",
+                        sku="66666",
+                        name="product name",
+                        price="60000",
+                        seller="ozonstore",
+                        tracking_price="60000"),    
+]
+
+user_instances = [
+    UserModel(tid=2137193153, 
+              name="Timur", 
+              username="tjann", 
+              user_pfp=test_pfp),
+    UserModel(tid=211111, 
+              name="One", 
+              username="oneOni4", 
+              user_pfp=test_pfp),
+    UserModel(tid=2122222, 
+              name="Two", 
+              username="twotwi4", 
+              user_pfp=test_pfp),
+    UserModel(tid=21333333, 
+              name="Three", 
+              username="threei4", 
+              user_pfp=test_pfp)
+]
+
+
+class TestDatabase(TestCase):
     def test_add_product_id_autoincrement(self):
         # This test ensures ids when assigned get incremented next time automatically
         # HOWEVER !!!
         # Sometimes ids do not start from 1 (tables do not get deleted)
         db = Database()
         db.reset()
+        
         product1 = TrackedProductModel(id=None,
                                        url="https://ozon.ru",
                                        sku="sku_1",
@@ -116,4 +187,28 @@ class TestDatabase:
         assert product.url == new_product.url and \
             product.sku == new_product.sku and \
             product.name == new_product.name
+        
+    def test_get_user(self):
+        db = Database()
+        db.reset()
+
+        user = deepcopy(user_instances[0])
+        assert not db.get_user(user.tid)
+
+        db.login_user(user)
+        assert user.__eq__(db.get_user(user.tid))
+        
+    def test_login_user(self):
+        db = Database()
+        db.reset()
+        
+        user = deepcopy(user_instances[0])
+        db.login_user(user)
+        assert user.__eq__(db.get_user(user.tid))
+        
+
+    def 
+
+        
+
                 
