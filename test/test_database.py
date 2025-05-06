@@ -16,14 +16,14 @@ class TestDatabase:
                                        price="999",
                                        seller="ozonstore",
                                        tracking_price="899")
-        product2 = TrackedProductModel(id="",
+        product2 = TrackedProductModel(id=None,
                                        url="https://ozon.ru",
                                        sku="sku_2",
                                        name="product name",
                                        price="999",
                                        seller="ozonstore",
                                        tracking_price="899")
-        product3 = TrackedProductModel(id="45",
+        product3 = TrackedProductModel(id=None,
                                        url="https://ozon.ru",
                                        sku="sku_3",
                                        name="product name",
