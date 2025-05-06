@@ -181,21 +181,25 @@ def display_user_info():
 
 def add_product_form(user_tid: str):
     """Form to add a new product to track."""
-    with st.form(key="add_product_form"):
-        st.subheader("Add New Product to Track")
+    st.subheader("Add New Product to Track")
 
-        method = st.radio(
+    method = st.radio(
             "Add by:",
             ("Product URL", "SKU"),
             horizontal=True
         )
 
         # Dynamic label based on selection
-        input_label = "Product URL" if method == "Product URL" else "Product SKU"
-        product_identifier = st.text_input(input_label)  # Updated label
+    if method == "Product URL":
+        input_label = "Product URL"
+    else:
+        input_label = "Product SKU"
 
-        price_threshold = st.text_input("Notify me when price drops below")
+    product_identifier = st.text_input(input_label)  # Updated label
 
+    price_threshold = st.text_input("Notify me when price drops below")
+
+    with st.form(key="add_product_form"):
         submitted = st.form_submit_button("Start Tracking")
         if submitted:
             if not product_identifier:

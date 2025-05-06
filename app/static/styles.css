@@ -53,7 +53,7 @@ h1 {
 
 /* Sidebar */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, var(--primary), ##FFFFFF);
+    background: linear-gradient(180deg, var(--primary), ##00A2FF);
 }
 
 /* Price Chart */
