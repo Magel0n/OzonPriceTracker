@@ -11,5 +11,9 @@ app/failurePrice.html
 app/failureName.html
 app/failureSeller.html
 
+# Profile pictures
+/app/static/UserProfilePictures/*
+!/app/static/UserProfilePictures/default.jpg
+
 # For VScode enjoyers
 .vscode/*

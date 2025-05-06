@@ -17,6 +17,7 @@ import jwt
 from fastapi import Depends, FastAPI, HTTPException, status, Request
 from jwt.exceptions import InvalidTokenError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
 
 TOKEN_ENCRYPTION_ALGORITHM = os.environ.get("TOKEN_ENCRYPTION_ALGORITHM", "HS256")
 
@@ -61,6 +62,8 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error stopping Telegram bot: {e}")
 
 app = FastAPI(lifespan=lifespan)
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
             
 async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
     credentials_exception = HTTPException(
@@ -160,7 +163,7 @@ async def get_product_history(product_id: int, user_tid: Annotated[int, Depends(
     if history == None:
         raise HTTPException(status_code=500, detail="Could not get price history from database")
     
-    return ProductHistoryResponse(history)
+    return ProductHistoryResponse(history=history)
     
 
 if __name__ == "__main__":

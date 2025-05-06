@@ -100,7 +100,7 @@ def display_user_info():
     st.markdown(
         f"""
         <div class="profile-container">
-            <img src="{STATIC_FILES_URL}/profile-pictures/{user['tid'] if user['user_pfp'] else 'https://via.placeholder.com/100'}" 
+            <img src="{STATIC_FILES_URL}/UserProfilePictures/{f"{user['user_pfp']}.jpg" if user['user_pfp'] != None else 'default.jpg'}" 
                  width="100" class="profile-image">
             <div>
                 <h2>{user['name']}</h2>
