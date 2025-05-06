@@ -184,12 +184,12 @@ def add_product_form(user_tid: str):
     st.subheader("Add New Product to Track")
 
     method = st.radio(
-            "Add by:",
-            ("Product URL", "SKU"),
-            horizontal=True
-        )
+        "Add by:",
+        ("Product URL", "SKU"),
+        horizontal=True
+    )
 
-        # Dynamic label based on selection
+    # Dynamic label based on selection
     if method == "Product URL":
         input_label = "Product URL"
     else:
@@ -240,9 +240,13 @@ def product_search(user_tid: str):
     # Search inputs with themed styling
     col1, col2 = st.columns(2)
     with col1:
-        search_query = st.text_input(
-            "Search by product name or seller",
-            help="Enter keywords to find products"
+        search_query_name = st.text_input(
+            "Search by product name",
+            help="Enter keywords to find products based on its name"
+        )
+        search_query_seller = st.text_input(
+            "Search by product seller",
+            help="Enter keywords to find products based on its seller name"
         )
 
     with col2:
@@ -261,7 +265,7 @@ def product_search(user_tid: str):
             use_container_width=True,
             type="primary"  # Uses the primary color from our theme
     ):
-        if search_query or price_range != (0.0, 1000.0):
+        if search_query_name or search_query_seller or price_range != (0.0, 1000.0):
             # Когда бэк доделаете подклбчите
             # make_api_request("/search", "POST", {
             #     "query": search_query,
@@ -270,7 +274,7 @@ def product_search(user_tid: str):
             # })
 
             # Показывает пока просто всякое
-            st.info(f"Searching for: '{search_query}' between ₽{price_range[0]:.2f}-₽{price_range[1]:.2f}")
+            st.info(f"Searching for: name like '{search_query_name}', seller like '{search_query_seller}' and price between ₽{price_range[0]:.2f}-₽{price_range[1]:.2f}")
 
             demo_results = [
                 {"name": "Premium Headphones", "price": "199.99", "seller": "AudioTech"},
@@ -280,10 +284,16 @@ def product_search(user_tid: str):
 
             # Display results with themed cards
             for product in demo_results:
+                if not(price_range[0] <= float(product['price']) <= price_range[1]):
+                    continue
+                if (search_query_name and (search_query_name.lower() not in product['name'].lower())):
+                    continue
+                if (search_query_seller and search_query_seller.lower() not in product['seller'].lower()):
+                    continue
                 with st.container(border=True):
                     cols = st.columns([3, 1, 1])
                     with cols[0]:
-                        st.markdown(f"**{product['name']}**")
+                        st.markdown(f"{product['name']}")
                         st.caption(f"Seller: {product['seller']}")
                     with cols[1]:
                         st.markdown(f"₽{product['price']}")
@@ -298,7 +308,6 @@ def product_search(user_tid: str):
                             st.rerun()
         else:
             st.warning("Please enter search criteria or adjust price range")
-
 
 def main():
     st.set_page_config(
