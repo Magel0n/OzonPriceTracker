@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Optional
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:12345")
-STATIC_FILES_URL = os.getenv("STATIC_FILES_URL", "http://localhost:12345/static")
+STATIC_FILES_URL = os.getenv("STATIC_FILES_URL",
+                             "http://localhost:12345/static")
 
 TG_BOT_LINK = "https://t.me/priceTrackerOzonBot"
 
@@ -24,7 +25,8 @@ def load_css():
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
-def make_api_request(endpoint: str, method: str = "GET", data: Optional[dict] = None):
+def make_api_request(endpoint: str, method: str = "GET",
+                     data: Optional[dict] = None):
     if not st.session_state.auth_token:
         return None, "Not authenticated"
 
@@ -45,7 +47,9 @@ def make_api_request(endpoint: str, method: str = "GET", data: Optional[dict] = 
         if response.status_code == 200:
             return response.json(), None
         elif response.status_code == 401:  # Unauthorized
-            return None, f'Unauthorized - please login via Telegram bot {TG_BOT_LINK}'
+            return (None,
+                    'Unauthorized - please login'
+                    + ' via Telegram bot {TG_BOT_LINK}')
         else:
             error_data = response.json()
             return None, error_data.get("message", "Unknown error occurred")
@@ -73,8 +77,11 @@ def auth_gate():
     <div style="text-align: center; margin-top: 50px;">
         <h3>Please login via our Telegram bot</h3>
         <a href="{TG_BOT_LINK}" target="_blank">
-            <button style="background-color: #005BFF; color: white; border: none; 
-                         padding: 10px 20px; border-radius: 5px; cursor: pointer;
+            <button style="background-color: #005BFF;
+            color: white;
+            border: none;
+                         padding: 10px 20px;
+                         border-radius: 5px; cursor: pointer;
                          font-size: 16px;">
                 Login with Telegram
             </button>
@@ -85,7 +92,7 @@ def auth_gate():
 
 
 def display_user_info():
-    data, error = make_api_request(f"/profile")
+    data, error = make_api_request("/profile")
 
     if error:
         st.error(f"Failed to load user data: {error}")
@@ -95,10 +102,12 @@ def display_user_info():
     tracked_products = data["tracked_products"]
 
     # CSS classes
+    filename = f"{user['user_pfp']}.jpg" if user['user_pfp'] else 'default.jpg'
+    upp = "UserProfilePictures"
     st.markdown(
         f"""
         <div class="profile-container">
-            <img src="{STATIC_FILES_URL}/UserProfilePictures/{f"{user['user_pfp']}.jpg" if user['user_pfp'] != None else 'default.jpg'}" 
+            <img src="{STATIC_FILES_URL}/{upp}/{filename}"
                  width="100" class="profile-image">
             <div>
                 <h2>{user['name']}</h2>
@@ -115,12 +124,14 @@ def display_user_info():
         st.info("You are not tracking any products yet.")
     else:
         for product in tracked_products:
-            with st.expander(f"🛍️ {product['name']} - 💰 {product['price']}"):
+            with (st.expander(f"🛍️ {product['name']} - 💰 {product['price']}")):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.markdown(f"**Seller:** {product['seller']}")
-                    st.markdown(f"**URL:** [{product['url']}]({product['url']})")
-                    st.markdown(f"**Alert Threshold:** ₽{product['tracking_price']}")
+                    st.markdown(f"**URL:** [{product['url']}]"
+                                + "({product['url']})")
+                    st.markdown("**Alert Threshold:** "
+                                + f"₽{product['tracking_price']}")
 
                 with col2:
                     with st.form(key=f"threshold_{product['id']}"):
@@ -135,19 +146,22 @@ def display_user_info():
                                 "product_id": product["id"],
                                 "new_price": new_threshold
                             }
-                            _, error = make_api_request("/tracking", "PUT", update_data)
+                            _, error = make_api_request("/tracking",
+                                                        "PUT", update_data)
                             if error:
                                 st.error(f"Error: {error}")
                             else:
                                 st.success("Threshold updated!")
                                 st.rerun()
 
-                    if st.button("🗑️ Stop Tracking", key=f"delete_{product['id']}"):
+                    if st.button("🗑️ Stop Tracking",
+                                 key=f"delete_{product['id']}"):
                         delete_data = {
                             "user_tid": st.session_state.user_tid,
                             "product_id": product["id"]
                         }
-                        _, error = make_api_request("/tracking", "DELETE", delete_data)
+                        _, error = make_api_request("/tracking",
+                                                    "DELETE", delete_data)
                         if error:
                             st.error(f"Error: {error}")
                         else:
@@ -156,11 +170,13 @@ def display_user_info():
 
                 # Price history visualization
                 st.subheader("📈 Price History")
-                history_data, error = make_api_request(f"/product/{product['id']}/history")
+                path = f"/product/{product['id']}/history"
+                history_data, error = make_api_request(path)
                 if error:
                     st.warning(f"Couldn't load history: {error}")
                 elif history_data["history"]:
-                    df = pd.DataFrame(history_data["history"], columns=["timestamp", "price"])
+                    df = pd.DataFrame(history_data["history"],
+                                      columns=["timestamp", "price"])
                     df["price"] = df["price"].astype(float)
                     df["date"] = pd.to_datetime(df["timestamp"], unit="s")
 
@@ -212,11 +228,15 @@ def add_product_form(user_tid: str):
 
             tracking_data = {
                 "user_tid": user_tid,
-                "product_url": product_identifier if method == "Product URL" else None,
-                "product_sku": product_identifier if method == "SKU" else None
+                "product_url": product_identifier if method == "Product URL"
+                else None,
+                "product_sku": product_identifier if method == "SKU"
+                else None
             }
 
-            response, error = make_api_request("/tracking", "POST", tracking_data)
+            response, error = make_api_request("/tracking",
+                                               "POST",
+                                               tracking_data)
             if error:
                 st.error(f"Error: {error}")
             else:
@@ -265,7 +285,8 @@ def product_search(user_tid: str):
             use_container_width=True,
             type="primary"  # Uses the primary color from our theme
     ):
-        if search_query_name or search_query_seller or price_range != (0.0, 1000.0):
+        if (search_query_name or search_query_seller
+                or price_range != (0.0, 1000.0)):
             # Когда бэк доделаете подклбчите
             # make_api_request("/search", "POST", {
             #     "query": search_query,
@@ -274,21 +295,33 @@ def product_search(user_tid: str):
             # })
 
             # Показывает пока просто всякое
-            st.info(f"Searching for: name like '{search_query_name}', seller like '{search_query_seller}' and price between ₽{price_range[0]:.2f}-₽{price_range[1]:.2f}")
+            st.info(
+                f"Searching for: name like '{search_query_name}', " +
+                f"seller like '{search_query_seller}' and price between " +
+                f"₽{price_range[0]:.2f}-₽{price_range[1]:.2f}")
 
             demo_results = [
-                {"name": "Premium Headphones", "price": "199.99", "seller": "AudioTech"},
-                {"name": "Wireless Earbuds", "price": "89.99", "seller": "SoundMaster"},
-                {"name": "Bluetooth Speaker", "price": "129.99", "seller": "AudioTech"}
+                {"name": "Premium Headphones",
+                 "price": "199.99",
+                 "seller": "AudioTech"},
+                {"name": "Wireless Earbuds",
+                 "price": "89.99",
+                 "seller": "SoundMaster"},
+                {"name": "Bluetooth Speaker",
+                 "price": "129.99",
+                 "seller": "AudioTech"}
             ]
 
             # Display results with themed cards
             for product in demo_results:
-                if not(price_range[0] <= float(product['price']) <= price_range[1]):
+                if not (price_range[0] <= float(product['price'])
+                        <= price_range[1]):
                     continue
-                if (search_query_name and (search_query_name.lower() not in product['name'].lower())):
+                if search_query_name and (search_query_name.lower()
+                                          not in product['name'].lower()):
                     continue
-                if (search_query_seller and search_query_seller.lower() not in product['seller'].lower()):
+                if (search_query_seller and search_query_seller.lower()
+                        not in product['seller'].lower()):
                     continue
                 with st.container(border=True):
                     cols = st.columns([3, 1, 1])
@@ -304,10 +337,12 @@ def product_search(user_tid: str):
                                 help=f"Track price for {product['name']}"
                         ):
                             # In real app: call add_tracking API
-                            st.success(f"Added {product['name']} to tracked products!")
+                            st.success(f"Added {product['name']}"
+                                       + " to tracked products!")
                             st.rerun()
         else:
             st.warning("Please enter search criteria or adjust price range")
+
 
 def main():
     st.set_page_config(
