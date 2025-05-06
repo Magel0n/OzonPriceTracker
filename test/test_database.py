@@ -1,214 +1,226 @@
-from copy import deepcopy
 from pathlib import Path
-from api_models import *
-from database import Database
 from unittest import TestCase
-
-
-test_pfp = str(Path("test/static/user_pfp_example").read_bytes())
-
-product_instances = [
-    TrackedProductModel(id=None,
-                        url="https://ozon.ru",
-                        sku="11111",
-                        name="product name",
-                        price="13450",
-                        seller="ozonstore",
-                        tracking_price="12000"),
-    TrackedProductModel(id=None,
-                        url="https://ozon.ru",
-                        sku="22222",
-                        name="product name",
-                        price="25000",
-                        seller="ozonstore",
-                        tracking_price="20000"),
-    TrackedProductModel(id=None,
-                        url="https://ozon.ru",
-                        sku="33333",
-                        name="product name",
-                        price="31000",
-                        seller="ozonstore",
-                        tracking_price="30010"),
-    TrackedProductModel(id=None,
-                        url="https://ozon.ru",
-                        sku="44444",
-                        name="product name",
-                        price="49999",
-                        seller="ozonstore",
-                        tracking_price="45999"),
-    TrackedProductModel(id=None,
-                        url="https://ozon.ru",
-                        sku="55555",
-                        name="product name",
-                        price="55555",
-                        seller="ozonstore",
-                        tracking_price="51000"),
-    TrackedProductModel(id=None,
-                        url="https://ozon.ru",
-                        sku="66666",
-                        name="product name",
-                        price="60000",
-                        seller="ozonstore",
-                        tracking_price="60000"),    
-]
-
-user_instances = [
-    UserModel(tid=2137193153, 
-              name="Timur", 
-              username="tjann", 
-              user_pfp=test_pfp),
-    UserModel(tid=211111, 
-              name="One", 
-              username="oneOni4", 
-              user_pfp=test_pfp),
-    UserModel(tid=2122222, 
-              name="Two", 
-              username="twotwi4", 
-              user_pfp=test_pfp),
-    UserModel(tid=21333333, 
-              name="Three", 
-              username="threei4", 
-              user_pfp=test_pfp)
-]
+from api_models import UserModel, TrackedProductModel, TrackingModel
+from database import Database
+import os
 
 
 class TestDatabase(TestCase):
-    def test_add_product_id_autoincrement(self):
-        # This test ensures ids when assigned get incremented next time automatically
-        # HOWEVER !!!
-        # Sometimes ids do not start from 1 (tables do not get deleted)
-        db = Database()
-        db.reset()
+    @classmethod
+    def setUpClass(cls):
+        # Using in-memory database avoids changes of primary database 
+        os.environ['db_url'] = "/tmp/test.db"
+        cls.db = Database()
         
-        product1 = TrackedProductModel(id=None,
-                                       url="https://ozon.ru",
-                                       sku="sku_1",
-                                       name="product name",
-                                       price="999",
-                                       seller="ozonstore",
-                                       tracking_price="899")
-        product2 = TrackedProductModel(id=None,
-                                       url="https://ozon.ru",
-                                       sku="sku_2",
-                                       name="product name",
-                                       price="999",
-                                       seller="ozonstore",
-                                       tracking_price="899")
-        product3 = TrackedProductModel(id=None,
-                                       url="https://ozon.ru",
-                                       sku="sku_3",
-                                       name="product name",
-                                       price="999",
-                                       seller="ozonstore",
-                                       tracking_price="899")
-        id_1 = db.add_product(product1)
-        id_2 = db.add_product(product2)
-        id_3 = db.add_product(product3)
-        assert id_1 is not None and id_1 >= 1
-        assert id_2 is not None and id_2 >= 1 and id_2 != id_1
-        assert id_3 is not None and id_3 >= 1 and id_3 != id_2
-    
-    def test_update_product(self):
-        db = Database()
-        db.reset()
-        products = [
-            TrackedProductModel(id="1",
-                                url="https://ozon.ru",
-                                sku="sku_1",
-                                name="product name",
-                                price="999",
-                                seller="ozonstore",
-                                tracking_price="899"),
-            TrackedProductModel(id="2",
-                                url="https://ozon.ru",
-                                sku="sku_2",
-                                name="product name",
-                                price="999",
-                                seller="ozonstore",
-                                tracking_price="899"),
-            TrackedProductModel(id="3",
-                                url="https://ozon.ru",
-                                sku="sku_3",
-                                name="product name",
-                                price="999",
-                                seller="ozonstore",
-                                tracking_price="899")
+    @classmethod
+    def tearDownClass(cls):
+        cls.db.close()
+
+    def setUp(self):
+        self.db.reset()
+
+    def test_login_user_insert(self):
+        user = UserModel(tid=2137193153, name="Timur Suleymanov", username="tjann7", user_pfp="123id$#W%TG")
+        result = self.db.login_user(user)
+
+        self.assertTrue(result)
+        
+        test_user = self.db.get_user(user.tid)
+        self.assertTrue(user.__eq__(test_user))
+        
+    def test_login_user_update(self):
+        user = UserModel(tid=21113245345, name="name", username="username", user_pfp="2q3rtefvgSD+{LPL+_)GFWE$^E%^T$T^")
+        self.db.login_user(user)
+        
+        updated_user = UserModel(tid=21113245345, name="UPDATED name", username="UPDATED name", user_pfp="123id$#W%TG")
+        result = self.db.login_user(updated_user)
+
+        self.assertTrue(result)
+        
+        test_user = self.db.get_user(updated_user.tid)
+        self.assertTrue(updated_user.__eq__(test_user))
+        
+    def test_update_products(self):
+        product = TrackedProductModel(id=None, url="https://ozon.ru", sku="sku1", name="SuperProductName", 
+                                    price="99999", seller="OzonShop", tracking_price="50000")
+        product_id = self.db.add_product(product)
+
+        self.assertTrue(product_id == 1)
+        
+        updated_product = TrackedProductModel(id=product_id, url="https://updated.ozon.ru", sku="new_sku1", 
+                                            name="new_SuperName", price="80000", seller="ozonUpdated", 
+                                            tracking_price="45000")
+        result = self.db.update_products([updated_product])
+        self.assertTrue(result)
+        
+        products = self.db.get_products()
+        self.assertTrue(updated_product.__eq__(products[0]))
+        
+    def test_update_products_no_change(self):
+        product = TrackedProductModel(id=999, url="https://ozon.ru/no_change", sku="sku_no_change_1", name="ProductUnchanged", 
+                                    price="777", seller="shopUnchanged", tracking_price="555")
+        result = self.db.update_products([product])
+        self.assertFalse(result)
+        
+    def test_add_product_new(self):
+        product = TrackedProductModel(id=None, url="https://ozon.ru", sku="sku1", name="ProductName", 
+                                    price="99999", seller="OzonShop", tracking_price="50000")
+        product_id = self.db.add_product(product)
+
+        self.assertIsNotNone(product_id)
+        
+        products = self.db.get_products()
+        self.assertTrue(len(products) == 1)
+        
+    def test_add_product_existing(self):
+        product1 = TrackedProductModel(id=None, url="url1", sku="sku1", name="name1", 
+                                    price="100", seller="seller1", tracking_price="90")
+        id_1 = self.db.add_product(product1)
+        
+        product2 = TrackedProductModel(id=None, url="url2", sku="sku1", name="name2", 
+                                         price="200", seller="seller2", tracking_price="180")
+        id_2 = self.db.add_product(product2)
+
+        self.assertTrue(id_1 == id_2)
+        
+        product2.id = id_2
+        products = self.db.get_products()
+        self.assertTrue(products[0].__eq__(product2))
+        
+    def test_add_tracking_new(self):
+        user = UserModel(tid=21113245345, 
+                         name="name", 
+                         username="username", 
+                         user_pfp="2q3rtefvgSD+{LPL+_)GFWE$^E%^T$T^")
+        product = TrackedProductModel(id=None, 
+                                      url="url", 
+                                      sku="sku", 
+                                      name="name", 
+                                      price="100", 
+                                      seller="seller", 
+                                      tracking_price="50")
+        
+        self.db.login_user(user)
+        product_id = self.db.add_product(product)
+
+        tracking = TrackingModel(user_tid=user.tid, 
+                                 product_id=product_id, 
+                                 new_price="80")
+        result = self.db.add_tracking(tracking)
+
+        self.assertTrue(result)
+        
+        tracked = self.db.get_tracked_products(user.tid)
+        self.assertTrue(len(tracked) == 1)
+        
+    def test_add_tracking_update(self):
+        tracking = TrackingModel(user_tid=111, 
+                                 product_id=222, 
+                                 new_price="333")
+        result = self.db.add_tracking(tracking)
+
+        self.assertTrue(result)
+        
+        updated_tracking = TrackingModel(user_tid=111, 
+                                         product_id=222, 
+                                         new_price="555")
+        result = self.db.add_tracking(updated_tracking)
+
+        self.assertFalse(result)
+        
+    def test_get_user_not_found(self):
+        user = self.db.get_user("999")
+        self.assertTrue(user is None)
+        
+    def test_get_tracked_products_empty(self):
+        products = self.db.get_tracked_products("999")
+        self.assertTrue(not products)
+        
+    def test_get_users_by_products(self):
+        users = [
+            UserModel(tid=21113245345, 
+                    name="tjann7", 
+                    username="Timur", 
+                    user_pfp="2q3rtefvgSD+{LPL+_)GFWE$^E%^T$T^"),
+            UserModel(tid=999, 
+                    name="name", 
+                    username="username", 
+                    user_pfp="whatever")
         ]
-        prod_1 = db.add_product(products[0])
-        prod_2 = db.add_product(products[1])
-        prod_3 = db.add_product(products[2])
-        
-        test_user = UserModel(tid=288, name="Timur", username="tjann", user_pfp="asfgvsvbwef1234")
-        db.login_user(test_user)
-        
-        
-        db.add_tracking(TrackingModel(user_tid=str(test_user.tid), product_id=str(prod_1), new_price=None))
-        db.add_tracking(TrackingModel(user_tid=str(test_user.tid), product_id=str(prod_2), new_price=None))
-        db.add_tracking(TrackingModel(user_tid=str(test_user.tid), product_id=str(prod_3), new_price=None))
-        
-        for product in products:
-            product.name = "changed product name"
-        db.update_products(products)
-        results = db.get_tracked_products(test_user.tid)
-        assert len(results) == 3 and \
-            results[0].name == products[0].name and \
-            results[1].name == products[1].name and \
-            results[2].name == products[2].name
+        products = [
+            TrackedProductModel(id=None, 
+                                url="url1",
+                                  sku="sku1", 
+                                  name="name1", 
+                                  price="300", 
+                                  seller="seller1", 
+                                  tracking_price="100"),
+            TrackedProductModel(id=None, 
+                                url="url2", 
+                                sku="sku2",
+                                name="name2", 
+                                price="600",
+                                seller="seller2", 
+                                tracking_price="200")
+        ]
 
-        db.delete_tracking(TrackingModel(user_tid=str(test_user.tid), product_id=str(prod_3), new_price=None))
+        self.db.login_user(users[0])
+        self.db.login_user(users[1])
         
-        results = db.get_tracked_products(test_user.tid)
-        assert len(results) == 2 and \
-            results[0].name == products[0].name and \
-            results[1].name == products[1].name
+        p1 = self.db.add_product(products[0])
+        p2 = self.db.add_product(products[1])
         
+        trackings = [
+            TrackingModel(user_tid=21113245345, product_id=p1, new_price="40"),
+            TrackingModel(user_tid=21113245345, product_id=p2, new_price="80"),
+            TrackingModel(user_tid=999, product_id=p1, new_price="85")
+        ]
         
-    def test_whatever(self):
-        db = Database()
-        db.reset()
-        user = UserModel(tid=288, name="Timur", username="tjann", user_pfp="asfgvsvbwef1234")
-        product = TrackedProductModel(id=None,
-                                      url="https://ozon.ru", 
-                                      sku="what_is_sku", 
-                                      name="product name",
-                                      price="999",
-                                      seller="ozonstore", 
-                                      tracking_price="899")
+        self.db.add_tracking(trackings[0])
+        self.db.add_tracking(trackings[1])
+        self.db.add_tracking(trackings[2])
         
-        db.login_user(user)
-        test_user = db.get_user(user.tid)
-        assert user.name == test_user.name and \
-            user.username == test_user.username
+        products[0].id = p1
+        products[1].id = p2
+        result = self.db.get_users_by_products(products)
         
-        prod_id = db.add_product(product)
-        track = TrackingModel(user_tid=str(user.tid), product_id=str(prod_id), new_price=product.price)
-        db.add_tracking(track)
-        new_product = db.get_tracked_products(user.tid)[0]
-        assert product.url == new_product.url and \
-            product.sku == new_product.sku and \
-            product.name == new_product.name
+        self.assertTrue(len(result[21113245345]) == 2)
+        self.assertTrue(len(result[999]) == 1)
         
-    def test_get_user(self):
-        db = Database()
-        db.reset()
+    def test_add_to_price_history(self):
+        product = TrackedProductModel(id=None, 
+                                      url="url", 
+                                      sku="sku", 
+                                      name="name", 
+                                      price="100", 
+                                      seller="seller", 
+                                      tracking_price="50")
+        product_id = self.db.add_product(product)
+        
+        result = self.db.add_to_price_history([product_id], 20251231)
+        self.assertTrue(result)
+        
+        history = self.db.get_price_history(product_id)
+        self.assertTrue(len(history) == 1)
+        
+    def test_add_to_price_history_invalid_product(self):
+        result = self.db.add_to_price_history([999], 20251231)
+        self.assertFalse(result)
+        
+    def test_delete_tracking(self):
+        self.test_add_tracking_new()
+        product_id = self.db.get_products()[0].id
+        
+        tracking = TrackingModel(user_tid=21113245345, product_id=product_id, new_price="500")
+        result = self.db.delete_tracking(tracking)
 
-        user = deepcopy(user_instances[0])
-        assert not db.get_user(user.tid)
-
-        db.login_user(user)
-        assert user.__eq__(db.get_user(user.tid))
+        self.assertTrue(result)
         
-    def test_login_user(self):
-        db = Database()
-        db.reset()
+        tracked = self.db.get_tracked_products(21113245345)
+        self.assertTrue(len(tracked) == 0)
         
-        user = deepcopy(user_instances[0])
-        db.login_user(user)
-        assert user.__eq__(db.get_user(user.tid))
-        
+    def test_delete_tracking_not_found(self):
+        tracking = TrackingModel(user_tid=999, product_id=999, new_price="500")
+        result = self.db.delete_tracking(tracking)
 
-    def 
-
-        
-
-                
+        self.assertFalse(result)

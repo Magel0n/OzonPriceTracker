@@ -1,4 +1,5 @@
 import os
+from queue import Empty
 import sqlite3
 from api_models import *
 
@@ -8,7 +9,7 @@ class Database:
     
     def __init__(self):
         self.db_url = os.environ.get("db_url", "database.db")
-        self.conn = sqlite3.connect(self.db_url)
+        self.conn = sqlite3.connect(self.db_url, timeout=20)
         self._init_db()
     
     def _init_db(self):
@@ -18,7 +19,7 @@ class Database:
             telegram_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             username TEXT NOT NULL,
-            user_pfp_id TEXT
+            user_pfp TEXT
         );""")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS products (
@@ -28,7 +29,7 @@ class Database:
             name TEXT NOT NULL,
             price TEXT NOT NULL,
             seller TEXT NOT NULL,
-            tracking_price
+            tracking_price TEXT
         );""")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tracking (
@@ -47,6 +48,7 @@ class Database:
             FOREIGN KEY (product_id) REFERENCES products(product_id)
         );""")
         self.conn.commit()
+        cursor.close()
     
     # Update user if already present
     def login_user(self, user: UserModel) -> bool:
@@ -64,10 +66,11 @@ class Database:
             """, (user.tid, user.name, user.username, user.user_pfp))
         
         self.conn.commit()
+        cursor.close()
         return True
         
         
-    # All products passed should have id so they can overwrite existing stuff
+    # All products passed should have id so they can overwrite existing stuff. True if any is updated, false - otherwise
     def update_products(self, products: list[TrackedProductModel]) -> bool:
         cursor = self.conn.cursor()
         def lmb(p: TrackedProductModel):
@@ -78,10 +81,11 @@ class Database:
             RETURNING *;
             """, (p.url, p.sku, p.name, p.price, p.seller, p.tracking_price, p.id))
             return len(cursor.fetchall())
-        changed = sum([lmb(prod) for prod in products])
-
-        if (changed > 0):
-            self.conn.commit()
+        res = sum([lmb(prod) for prod in products])
+        if res == 0:
+            return False
+        self.conn.commit()
+        cursor.close()
         return True
     
     # Should not have id or tracking_price, should have everything else, returns the id of the product
@@ -111,9 +115,10 @@ class Database:
         
         ret = cursor.fetchall()[0][0]
         self.conn.commit()
+        cursor.close()
         return ret
     
-    # Should add or update entry into tracking
+    # Should add or update entry into tracking. True - inserted, False - updated
     def add_tracking(self, tracking_info: TrackingModel) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -133,9 +138,13 @@ class Database:
                   tracking_info.product_id,
                   tracking_info.new_price))
             cursor.fetchall()
+            ret = True
+        else:
+            ret = False
         
         self.conn.commit()
-        return True
+        cursor.close()
+        return ret
     
     def get_user(self, tid: int) -> UserModel | None:
         cursor = self.conn.cursor()
@@ -149,6 +158,7 @@ class Database:
                              name=x[1],
                              username=x[2],
                              user_pfp=x[3])
+        cursor.close()
         if not result:
             return None
         else:
@@ -178,6 +188,7 @@ class Database:
                                        seller=results[5],
                                        tracking_price=results[6])
         ret = [lmb(val[0]) for val in ret]
+        cursor.close()
         return ret
         
     
@@ -189,12 +200,13 @@ class Database:
             cursor.execute("""
             SELECT telegram_id FROM tracking
             WHERE product_id = ?;
-            """, (p,))
+            """, (p.id,))
             for user in cursor.fetchall():
-                if user not in ret:
-                    ret[user] = []
-                ret[user].append(p)
+                if user[0] not in ret:
+                    ret[user[0]] = list()
+                ret[user[0]].append(p)
         [lmb(prod) for prod in product_ids]
+        cursor.close()
         return ret
         
     # gets ALL products
@@ -213,9 +225,10 @@ class Database:
                                        seller=x[5],
                                        tracking_price=x[6])
         results = [lmb(result) for result in results]
+        cursor.close()
         return results
         
-    # Adds updated price information to history table. In case if present - True, False - otherwise
+    # Adds updated price information to history table. In case if all products present - True, False - otherwise
     def add_to_price_history(self, product_ids: list[int], time: int) -> bool:
         cursor = self.conn.cursor()
         def lmb(p):
@@ -228,7 +241,7 @@ class Database:
             if not price:
                 return 1
             
-            price = price[0]
+            price = price[0][0]
             cursor.execute("""
             INSERT INTO history
             VALUES (?, ?, ?);
@@ -239,6 +252,7 @@ class Database:
         res = sum([lmb(prod) for prod in product_ids])
         
         self.conn.commit()
+        cursor.close()
         if res > 0:
             return False
         return True
@@ -251,6 +265,7 @@ class Database:
         WHERE product_id = ?;
         """, (product_id,))
         ret = [(result[0], result[1]) for result in cursor.fetchall()]
+        cursor.close()
         return sorted(ret, key=lambda x: x[1])
     
     # Returns True if deleted, False - if not found
@@ -261,11 +276,11 @@ class Database:
         WHERE telegram_id = ? AND product_id = ?
         RETURNING *;
         """, (tracking_info.user_tid, tracking_info.product_id))
-        if not cursor.fetchall():
-            return False
+        ret = len(cursor.fetchall()) > 0
 
         self.conn.commit()
-        return True
+        cursor.close()
+        return ret
     
     # Reset all the tables(required in development mostly)
     def reset(self):
@@ -284,6 +299,7 @@ class Database:
         """)
         cursor.fetchall()
         self.conn.commit()
+        cursor.close()
         self._init_db()
     
     # Closing Connection
