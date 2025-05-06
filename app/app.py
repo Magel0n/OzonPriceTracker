@@ -55,12 +55,10 @@ def make_api_request(endpoint: str, method: str = "GET", data: Optional[dict] = 
 
 def check_auth():
     query_params = st.query_params.to_dict()
-    print(query_params)
     if "token" in query_params and not st.session_state.auth_token:
         st.session_state.auth_token = query_params["token"]
         # Verify token with backend
         data, error = make_api_request("/verify-token")
-        print(data, error)
         if error:
             st.session_state.auth_token = None
             return False
@@ -323,6 +321,7 @@ def main():
         product_search(st.session_state.user_tid)
 
     if st.sidebar.button("🚪 Logout"):
+        make_api_request("/logout")
         st.session_state.clear()
         st.rerun()
 

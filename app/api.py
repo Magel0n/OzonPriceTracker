@@ -64,7 +64,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-            
+
+blacklist = set()
+
 async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -74,6 +76,8 @@ async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
     try:
         if token.scheme != "Bearer":
             raise credentials_exception
+        if token.credentials in blacklist:
+            raise credentials_exception
         payload = jwt.decode(token.credentials, app.state.secret_key, algorithms=[TOKEN_ENCRYPTION_ALGORITHM])
         user_id = payload.get("id")
         if user_id is None:
@@ -82,10 +86,31 @@ async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
     except InvalidTokenError:
         raise credentials_exception
 
+async def validate_token_token(token: Annotated[str, Depends(HTTPBearer())]):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        if token.scheme != "Bearer":
+            raise credentials_exception
+        if token.credentials in blacklist:
+            raise credentials_exception
+        payload = jwt.decode(token.credentials, app.state.secret_key, algorithms=[TOKEN_ENCRYPTION_ALGORITHM])
+        return token.credentials
+    except InvalidTokenError:
+        raise credentials_exception
 
 @app.get("/verify-token")
 async def verify_token(user_tid: Annotated[int, Depends(validate_token)]) -> VerifyTokenResponse:
     return VerifyTokenResponse(user_tid=user_tid)
+
+
+@app.get("/logout")
+async def logout(token: Annotated[str, Depends(validate_token_token)]) -> StatusResponse:
+    blacklist.add(token)
+    return StatusResponse(success=True, message="")
 
 
 @app.get("/profile")
