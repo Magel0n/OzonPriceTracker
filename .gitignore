@@ -10,3 +10,6 @@ downloaded_files/*
 app/failurePrice.html
 app/failureName.html
 app/failureSeller.html
+
+# For VScode enjoyers
+.vscode/*

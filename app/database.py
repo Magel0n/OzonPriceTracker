@@ -5,9 +5,6 @@ from api_models import *
 class Database:
     conn: sqlite3.Connection
     db_url: str
-    # TODO: I guess these aren't needed for now
-    # db_user: str 
-    # db_pass: str
     
     def __init__(self):
         self.db_url = os.environ.get("db_url", "database.db")
@@ -48,7 +45,7 @@ class Database:
             price TEXT NOT NULL,
             time TEXT NOT NULL,
             FOREIGN KEY (product_id) REFERENCES products(product_id)
-        );""") # TODO: TIMESTAMP for time maybe. Don't know which is more complicated operation
+        );""")
         self.conn.commit()
     
     # Update user if already present
@@ -79,11 +76,12 @@ class Database:
             SET url = ?, sku = ?, name = ?, price = ?, seller = ?, tracking_price = ?
             WHERE product_id = ?
             RETURNING *;
-            """, (p.url, p.sku, p.name, p.price, p.seller, p.id, p.tracking_price))
+            """, (p.url, p.sku, p.name, p.price, p.seller, p.tracking_price, p.id))
             return len(cursor.fetchall())
-        [lmb(prod) for prod in products]
+        changed = sum([lmb(prod) for prod in products])
 
-        self.conn.commit()
+        if (changed > 0):
+            self.conn.commit()
         return True
     
     # Should not have id or tracking_price, should have everything else, returns the id of the product
@@ -95,16 +93,24 @@ class Database:
         WHERE sku = ?;
         """, (product.sku,))
         ret = cursor.fetchall()
-        if not cursor.fetchall():
+        if not ret:
             cursor.execute("""
             INSERT INTO products (url, sku, name, price, seller, tracking_price)
             VALUES (?, ?, ?, ?, ?, ?)
             RETURNING product_id;
             """, (product.url, product.sku, product.name, 
                   product.price, product.seller, product.tracking_price))
-            ret = cursor.fetchall()[0][0]
-            self.conn.commit()
-
+        else:
+            cursor.execute("""
+            UPDATE products
+            SET url = ?, name = ?, price = ?, seller = ?, tracking_price = ?
+            WHERE sku = ?
+            RETURNING product_id;
+            """, (product.url, product.name, product.price, 
+                  product.seller, product.tracking_price, product.sku))
+        
+        ret = cursor.fetchall()[0][0]
+        self.conn.commit()
         return ret
     
     # Should add or update entry into tracking
@@ -159,20 +165,21 @@ class Database:
         ret = cursor.fetchall()
         def lmb(x: str):
             cursor.execute("""
-            SELECT url, sku, name, price, seller
+            SELECT product_id, url, sku, name, price, seller, tracking_price
             FROM products
             WHERE product_id = ?;               
             """, (x,))
             results = cursor.fetchall()[0]
-            return TrackedProductModel(id=None,
-                                       url=results[0],
-                                       sku=results[1],
-                                       name=results[2],
-                                       price=results[3],
-                                       seller=results[4],
-                                       tracking_price=None)
+            return TrackedProductModel(id=results[0],
+                                       url=results[1],
+                                       sku=results[2],
+                                       name=results[3],
+                                       price=results[4],
+                                       seller=results[5],
+                                       tracking_price=results[6])
         ret = [lmb(val[0]) for val in ret]
         return ret
+        
     
     # Should return dictionary of users that track the products listed
     def get_users_by_products(self, product_ids: list[TrackedProductModel]) -> dict[int, list[TrackedProductModel]] | None:
@@ -184,9 +191,11 @@ class Database:
             WHERE product_id = ?;
             """, (p,))
             for user in cursor.fetchall():
-                ret[user] = ret[user] + p
-        results = [lmb(prod) for prod in product_ids]
-        return results
+                if user not in ret:
+                    ret[user] = []
+                ret[user].append(p)
+        [lmb(prod) for prod in product_ids]
+        return ret
         
     # gets ALL products
     def get_products(self) -> list[TrackedProductModel]:
@@ -196,17 +205,17 @@ class Database:
         """)
         results = cursor.fetchall()
         def lmb(x) -> TrackedProductModel:
-            return TrackedProductModel(id=None,
+            return TrackedProductModel(id=x[0],
                                        url=x[1],
                                        sku=x[2],
                                        name=x[3],
                                        price=x[4],
                                        seller=x[5],
-                                       tracking_price=None)
+                                       tracking_price=x[6])
         results = [lmb(result) for result in results]
         return results
         
-    # Add updated price information to history table, you may not check if the price has changed 
+    # Adds updated price information to history table. In case if present - True, False - otherwise
     def add_to_price_history(self, product_ids: list[int], time: int) -> bool:
         cursor = self.conn.cursor()
         def lmb(p):
@@ -214,17 +223,27 @@ class Database:
             SELECT price FROM products
             WHERE product_id = ?;
             """, (p,))
-            price = cursor.fetchall()[0]
+            price = cursor.fetchall()
+
+            if not price:
+                return 1
+            
+            price = price[0]
             cursor.execute("""
             INSERT INTO history
             VALUES (?, ?, ?);
             """, (p, price, time))
-        [lmb(prod) for prod in product_ids]
 
+            cursor.fetchall()
+            return 0
+        res = sum([lmb(prod) for prod in product_ids])
+        
         self.conn.commit()
+        if res > 0:
+            return False
         return True
         
-    # Get price history of product by its id, sort by timestamp
+    # Get price history of product by its id, sorted by timestamp 
     def get_price_history(self, product_id: int) -> list[tuple[int, str]] | None:
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -234,17 +253,21 @@ class Database:
         ret = [(result[0], result[1]) for result in cursor.fetchall()]
         return sorted(ret, key=lambda x: x[1])
     
+    # Returns True if deleted, False - if not found
     def delete_tracking(self, tracking_info: TrackingModel) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("""
         DELETE FROM tracking               
-        WHERE telegram_id = ? AND product_id = ?;
+        WHERE telegram_id = ? AND product_id = ?
+        RETURNING *;
         """, (tracking_info.user_tid, tracking_info.product_id))
-        cursor.fetchall()
-        
+        if not cursor.fetchall():
+            return False
+
         self.conn.commit()
         return True
     
+    # Reset all the tables(required in development mostly)
     def reset(self):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -263,6 +286,7 @@ class Database:
         self.conn.commit()
         self._init_db()
     
+    # Closing Connection
     def close(self):
         if self.conn:
             self.conn.close()
