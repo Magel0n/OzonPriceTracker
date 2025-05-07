@@ -29,8 +29,8 @@ class OzonScraper:
             else:
                 urls.append(product.url)
 
-        newPrices = self._get_info_for_products(urls)
-        productsToSend = []
+        newPrices = self._get_price_for_products(urls)
+        productsToSend: list[TrackedProductModel] = []
         for product, newPrice in zip(products, newPrices):
             if newPrice is None:
                 continue
@@ -41,7 +41,23 @@ class OzonScraper:
             product.price = newPrice
 
         self.database.update_products(products)
+        products_ids = [product.id for product in products]
+        self.database.add_to_price_history(products_ids, int(time.time()))
         usersToSend = self.database.get_users_by_products(productsToSend)
+
+        users_to_products: dict[str, list[TrackedProductModel]] = {}
+
+        for userId, items in usersToSend.items():
+            productsForThisUser: list[TrackedProductModel] = []
+            for item in filter(lambda x: x in productsToSend, items):
+                if users_to_products[str(userId)]:
+                    users_to_products[str(userId)] = [item]
+                else:
+                    users_to_products[str(userId)].append(item)
+
+        self.tgwrapper.push_notifications(users_to_products)
+
+
 
     # Should return product info by sku or url
     # use sku or url to find everything else
@@ -92,10 +108,12 @@ class OzonScraper:
         if url is None:
             url = correctUrl
 
-        return TrackedProductModel(id=None, url=url, sku=sku, name=nameLasting, price=str(priceLasting),
-                                   seller=sellerLasting, tracking_price=None)
+        product = TrackedProductModel(id=None, url=url, sku=sku, name=nameLasting, price=str(priceLasting),
+                                      seller=sellerLasting, tracking_price=None)
 
-    def _get_info_for_products(self, urls: list[str]) -> list[int | None]:
+        return product
+
+    def _get_price_for_products(self, urls: list[str]) -> list[int | None]:
         prices = []
         try:
             with seleniumbase.SB(undetectable=True, headless=self.headlessness) as sb:
