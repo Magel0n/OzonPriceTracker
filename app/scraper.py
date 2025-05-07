@@ -5,22 +5,26 @@ import seleniumbase
 from api_models import TrackedProductModel
 from database import Database
 from tgwrapper import TelegramWrapper
+import threading
 
 
 class OzonScraper:
     database: Database
 
     def __init__(self, database: Database, tgwrapper: TelegramWrapper, headlessness: bool = False,
-                 keepfailure: bool = False):
+                 keepfailure: bool = False, update_time: int = 60 * 60 * 24):
         self.keepFailure = keepfailure
         self.database = database
         self.headlessness = headlessness
         self.tgwrapper = tgwrapper
+        self.update_time = update_time
+        threading.Thread(target=self.update_offers_job(), args=[self], daemon=True).start()
 
     # Should run every so often, implementation and other details are up to you lmao
     # Use Database.get_products, Database.update_products, Database.get_users_by_products
     # TelegramWrapper.push_notifications, Database.add_to_price_history
     def update_offers_job(self) -> None:
+        threading.Timer(self.update_time, self.update_offers_job, args=[self]).start()
         products = self.database.get_products()
         urls = []
         for product in products:
@@ -29,35 +33,33 @@ class OzonScraper:
             else:
                 urls.append(product.url)
 
-        newPrices = self._get_price_for_products(urls)
-        productsToSend: list[TrackedProductModel] = []
-        for product, newPrice in zip(products, newPrices):
+        new_prices = self._get_price_for_products(urls)
+        products_to_send: list[TrackedProductModel] = []
+        for product, newPrice in zip(products, new_prices):
             if newPrice is None:
                 continue
 
             if product.price < newPrice:
-                productsToSend.append(product)
+                products_to_send.append(product)
 
             product.price = newPrice
 
         self.database.update_products(products)
         products_ids = [product.id for product in products]
         self.database.add_to_price_history(products_ids, int(time.time()))
-        usersToSend = self.database.get_users_by_products(productsToSend)
+        usersToSend = self.database.get_users_by_products(products_to_send)
 
         users_to_products: dict[str, list[TrackedProductModel]] = {}
 
         for userId, items in usersToSend.items():
             productsForThisUser: list[TrackedProductModel] = []
-            for item in filter(lambda x: x in productsToSend, items):
+            for item in filter(lambda x: x in products_to_send, items):
                 if users_to_products[str(userId)]:
                     users_to_products[str(userId)] = [item]
                 else:
                     users_to_products[str(userId)].append(item)
 
         self.tgwrapper.push_notifications(users_to_products)
-
-
 
     # Should return product info by sku or url
     # use sku or url to find everything else
@@ -69,47 +71,47 @@ class OzonScraper:
             return None  # Nothing inputted
 
         if sku is None:
-            correctUrl = self._check_url(url)
+            correct_url = self._check_url(url)
         else:
-            correctUrl = self._check_url("https://www.ozon.ru/product/" + sku)
-        nameLasting = None
-        priceLasting = None
-        sellerLasting = None
-        if correctUrl is None:
+            correct_url = self._check_url("https://www.ozon.ru/product/" + sku)
+        name_lasting = None
+        price_lasting = None
+        seller_lasting = None
+        if correct_url is None:
             return None  # Failure to parse url
 
-        # print(correctUrl)  # TODO fix url as sku possibility
+        # print(correct_url)  # TODO fix url as sku possibility
 
-        nameLasting, priceLasting, sellerLasting = self._get_info_for_product(correctUrl)
+        name_lasting, price_lasting, seller_lasting = self._get_info_for_product(correct_url)
         name = None
         price = None
         seller = None
-        if sellerLasting is None or priceLasting is None or nameLasting is None:
+        if seller_lasting is None or price_lasting is None or name_lasting is None:
             for i in range(3):
-                name, price, seller = self._get_info_for_product(correctUrl)
-                if sellerLasting is None:
-                    sellerLasting = seller
-                if priceLasting is None:
-                    priceLasting = price
-                if nameLasting is None:
-                    nameLasting = name
+                name, price, seller = self._get_info_for_product(correct_url)
+                if seller_lasting is None:
+                    seller_lasting = seller
+                if price_lasting is None:
+                    price_lasting = price
+                if name_lasting is None:
+                    name_lasting = name
 
-        if sellerLasting is None:
-            sellerLasting = ""
-        if nameLasting is None:
-            nameLasting = ""
+        if seller_lasting is None:
+            seller_lasting = ""
+        if name_lasting is None:
+            name_lasting = ""
 
-        if priceLasting is None:
+        if price_lasting is None:
             return None
 
         if sku is None:
             sku = ""
 
         if url is None:
-            url = correctUrl
+            url = correct_url
 
-        product = TrackedProductModel(id=None, url=url, sku=sku, name=nameLasting, price=str(priceLasting),
-                                      seller=sellerLasting, tracking_price=None)
+        product = TrackedProductModel(id=None, url=url, sku=sku, name=name_lasting, price=str(price_lasting),
+                                      seller=seller_lasting, tracking_price=None)
 
         return product
 
@@ -255,7 +257,8 @@ class OzonScraper:
 
 
 if __name__ == '__main__':
-    scraper = OzonScraper("", "", headlessness=True, keepfailure=True)
+    database = Database()
+    scraper = OzonScraper(database, TelegramWrapper(database, "123"), headlessness=True, keepfailure=True, update_time=60)
 
     url1 = "https://www.ozon.ru/product/spalnyy-meshok-rsp-sleep-450-big-225-90-sm-molniya-sprava-1711093999/"
     url2 = "https://www.ozon.ru/product/palatka-4-mestnaya-2031340268/"

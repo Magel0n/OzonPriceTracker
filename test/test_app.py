@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 import streamlit as st
-from app.app import (
+from app import (
     make_api_request,
     check_auth,
     auth_gate,
