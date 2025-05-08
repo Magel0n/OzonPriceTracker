@@ -186,7 +186,7 @@ class Database:
                                        price=x[4],
                                        seller=x[5],
                                        tracking_price=x[6])
-        ret = [lmb(val[0]) for val in results]
+        ret = [lmb(val) for val in results]
         cursor.close()
         return ret
 
