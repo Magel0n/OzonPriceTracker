@@ -51,6 +51,52 @@ def mock_user_data():
 
 
 @pytest.fixture
+def mock_user_data_several_products():
+    with patch("app.requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "user": {
+                "name": "Test User",
+                "username": "testuser",
+                "user_pfp": "test_pfp"
+            },
+            "tracked_products": [
+                {
+                    "id": "1",
+                    "name": "Product 1",
+                    "price": "100.00",
+                    "seller": "Test Seller",
+                    "url": "http://test.com",
+                    "tracking_price": "90.00"
+                },
+                {
+                    "id": "2",
+                    "name": "Product 2",
+                    "price": "200.00",
+                    "seller": "Test Seller",
+                    "url": "http://test.com",
+                    "tracking_price": "90.00"
+                },
+                {
+                    "id": "3",
+                    "name": "Product 3",
+                    "price": "300.00",
+                    "seller": "Test Seller",
+                    "url": "http://test.com",
+                    "tracking_price": "270.00"
+                }
+            ],
+            "history": [
+                [1625097600, 100.0],  # [timestamp, price]
+                [1625184000, 95.0],
+                [1625270400, 90.0]
+            ]
+        }
+        mock_get.return_value = mock_response
+        yield
+
+@pytest.fixture
 def mock_empty_products():
     with patch("app.requests.get") as mock_get:
         mock_response = MagicMock()
@@ -88,7 +134,7 @@ def test_auth_gate():
     at.run()
 
     assert at.title[0].value == "🔒 Product Price Tracker"
-    assert "Login with Telegram" in at.markdown[0].value
+    assert "Login with Telegram" in at.markdown[1].value
     assert not at.session_state.get("auth_token")
 
 
@@ -114,7 +160,7 @@ def test_failed_auth():
         at.query_params = {"token": "invalid_token"}
         at.run()
 
-        assert "auth_token" not in at.session_state
+        assert at.session_state['auth_token'] is None
         assert at.title[0].value == "🔒 Product Price Tracker"
 
 
@@ -124,7 +170,7 @@ def test_user_profile_display(mock_auth_success, mock_user_data):
     at.query_params = {"token": "test_token"}
     at.run()
 
-    assert "Test User" in at.markdown[0].value
+    assert "Test User" in at.markdown[1].value
     assert "📊 Your Tracked Products" in at.header[0].value
     assert "Test Product" in at.expander[0].label
     assert "📈 Price History" in at.subheader[0].value
@@ -298,9 +344,10 @@ def test_logout(mock_auth_success, mock_user_data):
     with patch("app.requests.get") as mock_get:
         mock_get.return_value.status_code = 200
         at.sidebar.button[0].click()  # Logout button
+        at.query_params = None
         at.run()
 
-        assert at.title[0].value == "🔒 Product Price Tracker"
+        assert at.session_state['auth_token'] is None
 
 
 def test_api_error_handling(mock_auth_success, mock_user_data):
@@ -360,9 +407,9 @@ def test_default_profile_picture(mock_auth_success):
         at.query_params = {"token": "test_token"}
         at.run()
 
-        assert "default.jpg" in at.markdown[0].value
+        assert "default.jpg" in at.markdown[1].value
 
-def test_multiple_tracked_products(mock_auth_success, mock_user_data):
+def test_multiple_tracked_products(mock_auth_success, mock_user_data_several_products):
     """Test display of multiple tracked products"""
 
     at = AppTest.from_file("app/app.py")
