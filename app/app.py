@@ -36,20 +36,11 @@ def make_api_request(endpoint: str, method: str = "GET",
         if method.upper() == "GET":
             response = requests.get(url, headers=headers, timeout=10)
         elif method.upper() == "POST":
-            response = requests.post(url,
-                                     json=data,
-                                     headers=headers,
-                                     timeout=10)
+            response = requests.post(url, json=data, headers=headers, timeout=10)
         elif method.upper() == "PUT":
-            response = requests.put(url,
-                                    json=data,
-                                    headers=headers,
-                                    timeout=10)
+            response = requests.put(url, json=data, headers=headers, timeout=10)
         elif method.upper() == "DELETE":
-            response = requests.delete(url,
-                                       json=data,
-                                       headers=headers,
-                                       timeout=10)
+            response = requests.delete(url, json=data, headers=headers, timeout=10)
         else:
             return None, "Invalid HTTP method"
 
@@ -201,7 +192,7 @@ def display_user_info():
                         plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)"
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key=product['id'])
                 else:
                     st.info("No price history available")
 
