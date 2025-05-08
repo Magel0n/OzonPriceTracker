@@ -8,6 +8,7 @@ secrets.env
 
 # For selenium
 app/downloaded_files/*
+test/downloaded_files/*
 downloaded_files/*
 **.env
 app/failurePrice.html
