@@ -55,7 +55,8 @@ jobs:
       - name: Ruff Lint
         uses: astral-sh/ruff-action@v3
         with:
-          args: "--exclude=test/*"
+          version: "0.11.8"
+          config: "ruff.toml"
 
   security:
     runs-on: ubuntu-latest
@@ -74,7 +75,7 @@ jobs:
         uses: abatilo/actions-poetry@v4
 
       - name: Run Bandit
-        run: bash <(curl -s https://raw.githubusercontent.com/CICDToolbox/bandit/master/pipeline.sh)
+        run: bash <(curl -s https://raw.githubusercontent.com/CICDToolbox/bandit/master/pipeline.sh) --exclude test/
 
       - name: Run Snyk for only severe vulnerabilities
         uses: snyk/actions/python@master

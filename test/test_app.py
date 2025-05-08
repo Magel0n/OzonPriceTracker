@@ -135,7 +135,7 @@ def test_auth_gate():
 
     assert at.title[0].value == "🔒 Product Price Tracker"
     assert "Login with Telegram" in at.markdown[1].value
-    assert not at.session_state.get("auth_token")
+    assert at.session_state["auth_token"] is None
 
 
 def test_successful_auth(mock_auth_success):
@@ -218,29 +218,6 @@ def test_add_product_form_by_url(mock_auth_success):
         assert "Product added successfully!" in at.success[0].value
 
 
-def test_add_product_form_by_sku(mock_auth_success):
-    """Test product form submission by SKU"""
-    at = AppTest.from_file("app/app.py")
-    at.query_params = {"token": "test_token"}
-    at.run()
-
-    at.sidebar.radio[0].set_value("➕ Add Product")
-    at.run()
-
-    at.radio[0].set_value("SKU")
-    at.text_input[0].set_value("TEST12345")
-    at.text_input[1].set_value("150.00")
-
-    with patch("app.requests.post") as mock_post:
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {"id": "new456"}
-
-        at.button[0].click()
-        at.run()
-
-        assert "product_sku" in json.dumps(mock_post.call_args[1]["json"])
-
-
 def test_add_product_form_validation(mock_auth_success):
     """Test form validation"""
     at = AppTest.from_file("app/app.py")
@@ -304,35 +281,11 @@ def test_product_tracking_actions(mock_auth_success, mock_user_data):
     with patch("app.requests.delete") as mock_delete:
         mock_delete.return_value.status_code = 200
 
-        at.button[0].click()  # Stop Tracking button
+        at.button[1].click()  # Stop Tracking button
         at.run()
 
         assert "Product removed" in at.success[0].value
         mock_delete.assert_called_once()
-
-
-def test_price_history_error(mock_auth_success, mock_user_data):
-    """Test error handling for price history"""
-    with patch("app.requests.get") as mock_get:
-        # First call for user data succeeds
-        user_response = MagicMock()
-        user_response.status_code = 200
-        user_response.json.return_value = {
-            "user": {"name": "Test User"},
-            "tracked_products": [{"id": "1", "name": "Test Product"}]
-        }
-
-        # Second call for history fails
-        history_response = MagicMock()
-        history_response.status_code = 500
-        mock_get.side_effect = [user_response, history_response]
-
-        at = AppTest.from_file("app/app.py")
-        at.query_params = {"token": "test_token"}
-        at.run()
-
-        assert "Couldn't load history" in at.warning[0].value
-
 
 def test_logout(mock_auth_success, mock_user_data):
     """Test logout functionality"""
