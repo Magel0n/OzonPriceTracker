@@ -154,19 +154,19 @@ def mock_many_products():
     )]
 
 @pytest.fixture
-def mock_create_tracking():
-    return CreateTrackingModel(
-        user_tid = 12,
-        product_url = "test_url",
-        product_sku = "test_sku"
-    )
-
-@pytest.fixture
 def mock_tracking():
     return TrackingModel(
         user_tid = 12,
         product_id = 11,
         new_price = "1234"
+    )
+
+@pytest.fixture
+def mock_create_tracking():
+    return CreateTrackingModel(
+        user_tid = 12,
+        product_url = "test_url",
+        product_sku = "test_sku"
     )
 
 def test_verify_token(mock_app):
