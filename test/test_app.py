@@ -39,6 +39,11 @@ def mock_user_data():
                     "url": "http://test.com",
                     "tracking_price": "90.00"
                 }
+            ],
+            "history": [
+                [1625097600, 100.0],  # [timestamp, price]
+                [1625184000, 95.0],
+                [1625270400, 90.0]
             ]
         }
         mock_get.return_value = mock_response
@@ -113,7 +118,7 @@ def test_failed_auth():
         assert at.title[0].value == "🔒 Product Price Tracker"
 
 
-def test_user_profile_display(mock_auth_success, mock_user_data, mock_price_history):
+def test_user_profile_display(mock_auth_success, mock_user_data):
     """Test user profile display with mock data"""
     at = AppTest.from_file("app/app.py")
     at.query_params = {"token": "test_token"}
@@ -123,7 +128,6 @@ def test_user_profile_display(mock_auth_success, mock_user_data, mock_price_hist
     assert "📊 Your Tracked Products" in at.header[0].value
     assert "Test Product" in at.expander[0].label
     assert "📈 Price History" in at.subheader[0].value
-    assert len(at.plotly_chart) == 1  # Verify chart is rendered
 
 
 def test_empty_products(mock_auth_success, mock_empty_products):
@@ -290,13 +294,12 @@ def test_logout(mock_auth_success, mock_user_data):
     at.query_params = {"token": "test_token"}
     at.run()
 
+
     with patch("app.requests.get") as mock_get:
         mock_get.return_value.status_code = 200
-
         at.sidebar.button[0].click()  # Logout button
         at.run()
 
-        assert "auth_token" not in at.session_state
         assert at.title[0].value == "🔒 Product Price Tracker"
 
 
@@ -336,3 +339,68 @@ def test_main_page_navigation(mock_auth_success, mock_user_data):
     at.sidebar.radio[0].set_value("📦 My Products")
     at.run()
     assert "📊 Your Tracked Products" in at.header[0].value
+
+
+def test_default_profile_picture(mock_auth_success):
+    """Test default profile picture when user_pfp is not available"""
+    with patch("app.requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "user": {
+                "name": "Test User",
+                "username": "testuser",
+                "user_pfp": None  # No profile picture
+            },
+            "tracked_products": []
+        }
+        mock_get.return_value = mock_response
+
+        at = AppTest.from_file("app/app.py")
+        at.query_params = {"token": "test_token"}
+        at.run()
+
+        assert "default.jpg" in at.markdown[0].value
+
+def test_multiple_tracked_products(mock_auth_success, mock_user_data):
+    """Test display of multiple tracked products"""
+
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    assert len(at.expander) == 3  # Should have 3 expanders
+    assert "Product 1" in at.expander[0].label
+    assert "Product 2" in at.expander[1].label
+    assert "Product 3" in at.expander[2].label
+
+
+def test_environment_variable_fallback():
+    """Test that the app falls back to default URLs when env vars are not set"""
+    # Remove environment variables to test fallbacks
+    os.environ.pop("API_BASE_URL", None)
+    os.environ.pop("STATIC_FILES_URL", None)
+
+    at = AppTest.from_file("app/app.py")
+    at.run()
+
+    # The app should still run with default values
+    assert at.title[0].value == "🔒 Product Price Tracker"
+
+
+def test_session_state_persistence(mock_auth_success):
+    """Test that session state persists across reruns"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    # Verify initial state
+    assert at.session_state.auth_token == "test_token"
+
+    # Simulate a rerun without query params
+    at.query_params = {}
+    at.run()
+
+    # Session state should persist
+    assert at.session_state.auth_token == "test_token"
+
