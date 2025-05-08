@@ -21,14 +21,14 @@ class TestScrapper(unittest.TestCase):
         self.env_patcher.stop()
 
     def test_initialization(self):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         self.assertTrue(scraper.headlessness)
         self.assertEqual(scraper.update_time, 60)
         self.assertTrue(scraper.keepFailure)
         del scraper
 
     def test_url_checker_valid(self):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         test_cases = [
             ("https://www.ozon.ru/product/123456", "https://www.ozon.ru/product/123456"),
             ("http://www.ozon.ru/product/456", "https://www.ozon.ru/product/456"),
@@ -40,7 +40,7 @@ class TestScrapper(unittest.TestCase):
                 self.assertEqual(scraper._check_url(input_url), expected)
 
     def test_url_checker_invalid(self):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         test_cases = [
             None,
             "",
@@ -57,7 +57,7 @@ class TestScrapper(unittest.TestCase):
 
     @patch('seleniumbase.SB')
     def test_get_info_for_product_valid(self, mock_sb):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         mock_instance = mock_sb.return_value.__enter__.return_value
         mock_instance.find_elements.side_effect = [
             [MagicMock(text="Test Product")],
@@ -72,7 +72,7 @@ class TestScrapper(unittest.TestCase):
 
     @patch('seleniumbase.SB')
     def test_get_info_for_product_invalid(self, mock_sb):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         mock_instance = mock_sb.return_value.__enter__.return_value
         mock_instance.find_elements.side_effect = []
 
@@ -82,7 +82,7 @@ class TestScrapper(unittest.TestCase):
         self.assertIsNone(seller)
 
     def test_scrape_product_with_url(self):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         with patch.object(scraper, '_get_info_for_product', return_value=("Test", 1000, "Seller")):
             result = scraper.scrape_product(url="https://www.ozon.ru/product/my-product-123")
             self.assertIsInstance(result, TrackedProductModel)
@@ -93,7 +93,7 @@ class TestScrapper(unittest.TestCase):
             self.assertEqual(result.sku, "123")
 
     def test_scrape_product_with_sku(self):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         with patch.object(scraper, '_get_info_for_product', return_value=("Test", 1000, "Seller")):
             result = scraper.scrape_product(sku="123")
             self.assertIsInstance(result, TrackedProductModel)
@@ -104,7 +104,7 @@ class TestScrapper(unittest.TestCase):
             self.assertEqual(result.sku, "123")
 
     def test_scrape_product_with_failures(self):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         self.assertIsNone(scraper.scrape_product(url="test", sku="123"))
         self.assertIsNone(scraper.scrape_product())
         with patch.object(scraper, '_check_url', return_value=None):
@@ -112,7 +112,7 @@ class TestScrapper(unittest.TestCase):
 
     @patch('seleniumbase.SB')
     def test__get_price_for_products(self, mock_sb):
-        scraper = OzonScraper(self.database, self.tgwrapper)
+        scraper = OzonScraper(self.tgwrapper)
         mock_instance = mock_sb.return_value.__enter__.return_value
         mock_instance.find_elements.side_effect = [
             [MagicMock(text="1\u2009999₽")],  # Some value for first
@@ -132,7 +132,7 @@ class TestScrapper(unittest.TestCase):
         with patch('scraper.Database', return_value=mock_db):
 
             with patch.object(mock_db, 'get_users_by_products', return_value={}):
-                scraper = OzonScraper(self.database, self.tgwrapper)
+                scraper = OzonScraper(self.tgwrapper)
                 with patch.object(scraper, '_get_price_for_products', return_value=[None]):
                     result = scraper.update_offers_job()
                     # time.sleep(min(scraper.update_time - 1, 15))
@@ -148,7 +148,7 @@ class TestScrapper(unittest.TestCase):
         with patch('scraper.Database', return_value=mock_db):
 
             with patch.object(mock_db, 'get_users_by_products', return_value={}):
-                scraper = OzonScraper(self.database, self.tgwrapper)
+                scraper = OzonScraper(self.tgwrapper)
                 with patch.object(scraper, '_get_price_for_products', return_value=[1500]):
                     result = scraper.update_offers_job()
                     # time.sleep(min(scraper.update_time - 1, 15))
@@ -168,7 +168,7 @@ class TestScrapper(unittest.TestCase):
         with patch('scraper.Database', return_value=mock_db):
 
             with patch.object(mock_db, 'get_users_by_products', return_value={1: [product]}):
-                scraper = OzonScraper(self.database, self.tgwrapper)
+                scraper = OzonScraper(self.tgwrapper)
                 with patch.object(scraper, '_get_price_for_products', return_value=[1000]):
                     result = scraper.update_offers_job()
                     # time.sleep(min(scraper.update_time - 1, 15))
@@ -181,7 +181,7 @@ class TestScrapper(unittest.TestCase):
                     scraper.tgwrapper.push_notifications.assert_called_once_with({'1': [product]})
 
     # def test_example(self):
-    #     scraper = OzonScraper(self.database, self.tgwrapper)
+    #     scraper = OzonScraper(self.tgwrapper)
     #
     #     answer = scraper.scrape_product(sku="1711093999")
     #     # print(answer)
