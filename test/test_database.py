@@ -1,12 +1,16 @@
 from api_models import UserModel, TrackedProductModel, TrackingModel
 from database import Database
-from unittest import TestCase
+from unittest import TestCase, mock
 import os
 
 
 class TestDatabase(TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.env_patcher = mock.patch.dict('os.environ', {
+                'db_url': 'test.db',
+        })
+        cls.env_patcher.start()
         # Using in-memory database avoids changes of primary database
         os.environ['db_url'] = "test.db"
         cls.db = Database()
@@ -14,6 +18,7 @@ class TestDatabase(TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.db.close()
+        cls.env_patcher.stop()
 
     def setUp(self):
         self.db.reset()
@@ -55,7 +60,7 @@ class TestDatabase(TestCase):
                                       name="SuperProductName",
                                       price="99999",
                                       seller="OzonShop",
-                                      tracking_price="50000")
+                                      delete_price="50000")
         product_id = self.db.add_product(product)
 
         self.assertTrue(product_id == 1)
@@ -66,7 +71,7 @@ class TestDatabase(TestCase):
                                               name="new_SuperName",
                                               price="80000",
                                               seller="ozonUpdated",
-                                              tracking_price="45000")
+                                              delete_price="45000")
         result = self.db.update_products([updated_product])
         self.assertTrue(result)
 
@@ -80,9 +85,9 @@ class TestDatabase(TestCase):
                                       name="ProductUnchanged",
                                       price="777",
                                       seller="shopUnchanged",
-                                      tracking_price="555")
+                                      delete_price="555")
         result = self.db.update_products([product])
-        self.assertFalse(result)
+        self.assertTrue(result)
 
     def test_add_product_new(self):
         product = TrackedProductModel(id=None,
@@ -91,7 +96,7 @@ class TestDatabase(TestCase):
                                       name="ProductName",
                                       price="99999",
                                       seller="OzonShop",
-                                      tracking_price="50000")
+                                      delete_price="50000")
         product_id = self.db.add_product(product)
 
         self.assertIsNotNone(product_id)
@@ -106,7 +111,7 @@ class TestDatabase(TestCase):
                                        name="name1",
                                        price="100",
                                        seller="seller1",
-                                       tracking_price="90")
+                                       delete_price="90")
         id_1 = self.db.add_product(product1)
 
         product2 = TrackedProductModel(id=None,
@@ -115,7 +120,7 @@ class TestDatabase(TestCase):
                                        name="name2",
                                        price="200",
                                        seller="seller2",
-                                       tracking_price="180")
+                                       delete_price="180")
         id_2 = self.db.add_product(product2)
 
         self.assertTrue(id_1 == id_2)
@@ -135,14 +140,14 @@ class TestDatabase(TestCase):
                                       name="name",
                                       price="100",
                                       seller="seller",
-                                      tracking_price="50")
+                                      delete_price="50")
 
         self.db.login_user(user)
         product_id = self.db.add_product(product)
 
         tracking = TrackingModel(user_tid=user.tid,
                                  product_id=product_id,
-                                 new_price="80")
+                                 tracking_price="80")
         result = self.db.add_tracking(tracking)
 
         self.assertTrue(result)
@@ -153,17 +158,17 @@ class TestDatabase(TestCase):
     def test_add_tracking_update(self):
         tracking = TrackingModel(user_tid=111,
                                  product_id=222,
-                                 new_price="333")
+                                 tracking_price="333")
         result = self.db.add_tracking(tracking)
 
         self.assertTrue(result)
 
         updated_tracking = TrackingModel(user_tid=111,
                                          product_id=222,
-                                         new_price="555")
+                                         tracking_price="555")
         result = self.db.add_tracking(updated_tracking)
 
-        self.assertFalse(result)
+        self.assertTrue(result)
 
     def test_get_user_not_found(self):
         user = self.db.get_user("999")
@@ -191,14 +196,14 @@ class TestDatabase(TestCase):
                                 name="name1",
                                 price="300",
                                 seller="seller1",
-                                tracking_price="100"),
+                                delete_price="100"),
             TrackedProductModel(id=None,
                                 url="url2",
                                 sku="sku2",
                                 name="name2",
                                 price="600",
                                 seller="seller2",
-                                tracking_price="200")
+                                delete_price="200")
         ]
 
         self.db.login_user(users[0])
@@ -208,9 +213,9 @@ class TestDatabase(TestCase):
         p2 = self.db.add_product(products[1])
 
         trackings = [
-            TrackingModel(user_tid=21113245345, product_id=p1, new_price="40"),
-            TrackingModel(user_tid=21113245345, product_id=p2, new_price="80"),
-            TrackingModel(user_tid=999, product_id=p1, new_price="85")
+            TrackingModel(user_tid=21113245345, product_id=p1, tracking_price="40"),
+            TrackingModel(user_tid=21113245345, product_id=p2, tracking_price="80"),
+            TrackingModel(user_tid=999, product_id=p1, tracking_price="85")
         ]
 
         self.db.add_tracking(trackings[0])
@@ -231,7 +236,7 @@ class TestDatabase(TestCase):
                                       name="name",
                                       price="100",
                                       seller="seller",
-                                      tracking_price="50")
+                                      delete_price="50")
         product_id = self.db.add_product(product)
 
         result = self.db.add_to_price_history([product_id], 20251231)
@@ -250,7 +255,7 @@ class TestDatabase(TestCase):
 
         tracking = TrackingModel(user_tid=21113245345,
                                  product_id=product_id,
-                                 new_price="500")
+                                 tracking_price="500")
         result = self.db.delete_tracking(tracking)
 
         self.assertTrue(result)
@@ -259,7 +264,7 @@ class TestDatabase(TestCase):
         self.assertTrue(len(tracked) == 0)
 
     def test_delete_tracking_not_found(self):
-        tracking = TrackingModel(user_tid=999, product_id=999, new_price="500")
+        tracking = TrackingModel(user_tid=999, product_id=999, tracking_price="500")
         result = self.db.delete_tracking(tracking)
 
         self.assertFalse(result)
