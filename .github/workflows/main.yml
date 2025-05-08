@@ -44,7 +44,7 @@ jobs:
         uses: py-actions/flake8@v2
 
       - name: Ruff Lint
-      - uses: astral-sh/ruff-action@v3
+        uses: astral-sh/ruff-action@v3
   
   security:
     runs-on: ubuntu-latest
