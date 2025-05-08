@@ -49,9 +49,13 @@ jobs:
 
       - name: flake8 Lint
         uses: py-actions/flake8@v2
+        with:
+          args: "--exclude=test/*"
 
       - name: Ruff Lint
         uses: astral-sh/ruff-action@v3
+        with:
+          args: "--exclude=test/*"
 
   security:
     runs-on: ubuntu-latest

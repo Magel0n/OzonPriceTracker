@@ -345,7 +345,7 @@ async def search(
 if __name__ == "__main__":
     uvicorn.run(
         "api:app",
-        host=os.getenv("API_URL", "0.0.0.0"),
+        host=os.getenv("API_URL", "127.0.0.1"),
         port=int(os.getenv("API_PORT", "12345")),
         log_level="debug",
         reload=True

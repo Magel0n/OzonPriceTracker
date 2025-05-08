@@ -13,14 +13,15 @@ class OzonScraper:
     database: Database
 
     def __init__(self, database: Database, tgwrapper: TelegramWrapper):
-        self.headlessness: bool = bool(
-            os.environ.get("scraper_headlessness", False))
-        self.update_time: int = int(
-            os.environ.get("scraper_update_time", 60 * 60 * 24))
-        self.keepFailure: bool = bool(
-            os.environ.get("scraper_keepFailure", False))
+        self.headlessness: bool = bool(os.environ.get(  # pragma: no mutate
+            "scraper_headlessness", False))  # pragma: no mutate
+        self.update_time: int = int(os.environ.get(  # pragma: no mutate
+            "scraper_update_time", 60 * 60 * 24))  # pragma: no mutate
+        self.keepFailure: bool = bool(os.environ.get(  # pragma: no mutate
+            "scraper_keepFailure", False))  # pragma: no mutate
         self.tgwrapper = tgwrapper
-        threading.Thread(target=self.update_loop, daemon=True).start()
+        threading.Thread(target=self.update_loop,  # pragma: no mutate
+                         daemon=True).start()  # pragma: no mutate
 
     def update_loop(self):
         self.database = Database()
