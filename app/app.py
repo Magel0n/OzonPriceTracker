@@ -34,13 +34,22 @@ def make_api_request(endpoint: str, method: str = "GET",
     headers = {"Authorization": f"Bearer {st.session_state.auth_token}"}
     try:
         if method.upper() == "GET":
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=10)
         elif method.upper() == "POST":
-            response = requests.post(url, json=data, headers=headers)
+            response = requests.post(url,
+                                     json=data,
+                                     headers=headers,
+                                     timeout=10)
         elif method.upper() == "PUT":
-            response = requests.put(url, json=data, headers=headers)
+            response = requests.put(url,
+                                    json=data,
+                                    headers=headers,
+                                    timeout=10)
         elif method.upper() == "DELETE":
-            response = requests.delete(url, json=data, headers=headers)
+            response = requests.delete(url,
+                                       json=data,
+                                       headers=headers,
+                                       timeout=10)
         else:
             return None, "Invalid HTTP method"
 
@@ -55,6 +64,8 @@ def make_api_request(endpoint: str, method: str = "GET",
             return None, error_data.get("message", "Unknown error occurred")
     except requests.exceptions.RequestException as e:
         return None, f"Connection error: {str(e)}"
+    except requests.exceptions.Timeout as e:
+        return None, f"Connection time out: {str(e)}"
 
 
 def check_auth():
@@ -287,13 +298,12 @@ def product_search(user_tid: str):
     ):
         if (search_query_name or search_query_seller
                 or price_range != (0.0, 1000.0)):
-            
-            results, error = make_api_request("/search", "POST", {
-                "query": search_query_name,
-                "min_price": price_range[0],
-                "max_price": price_range[1],
-                "seller": search_query_seller
-            })
+            # Когда бэк доделаете подклбчите
+            # make_api_request("/search", "POST", {
+            #     "query": search_query,
+            #     "min_price": price_range[0],
+            #     "max_price": price_range[1]
+            # })
 
             # Показывает пока просто всякое
             st.info(
@@ -301,8 +311,29 @@ def product_search(user_tid: str):
                 f"seller like '{search_query_seller}' and price between " +
                 f"₽{price_range[0]:.2f}-₽{price_range[1]:.2f}")
 
+            demo_results = [
+                {"name": "Premium Headphones",
+                 "price": "199.99",
+                 "seller": "AudioTech"},
+                {"name": "Wireless Earbuds",
+                 "price": "89.99",
+                 "seller": "SoundMaster"},
+                {"name": "Bluetooth Speaker",
+                 "price": "129.99",
+                 "seller": "AudioTech"}
+            ]
+
             # Display results with themed cards
-            for product in results:
+            for product in demo_results:
+                if not (price_range[0] <= float(product['price'])
+                        <= price_range[1]):
+                    continue
+                if search_query_name and (search_query_name.lower()
+                                          not in product['name'].lower()):
+                    continue
+                if (search_query_seller and search_query_seller.lower()
+                        not in product['seller'].lower()):
+                    continue
                 with st.container(border=True):
                     cols = st.columns([3, 1, 1])
                     with cols[0]:
@@ -317,20 +348,9 @@ def product_search(user_tid: str):
                                 help=f"Track price for {product['name']}"
                         ):
                             # In real app: call add_tracking API
-                            update_data = {
-                                "user_tid": st.session_state.user_tid,
-                                "product_id": product["id"],
-                                "new_price": new_threshold
-                            }
-                            _, error = make_api_request("/tracking",
-                                                        "PUT", update_data)
-                            
-                            if error:
-                                st.error(f"Error: {error}")
-                            else:
-                                st.success(f"Added {product['name']}"
-                                           + " to tracked products!")
-                                st.rerun()
+                            st.success(f"Added {product['name']}"
+                                       + " to tracked products!")
+                            st.rerun()
         else:
             st.warning("Please enter search criteria or adjust price range")
 

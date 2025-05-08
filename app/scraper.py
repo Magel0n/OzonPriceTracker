@@ -62,8 +62,10 @@ class OzonScraper:
         usersToSend = self.database.get_users_by_products(products_to_send)
 
         users_to_products: dict[str, list[TrackedProductModel]] = {}
-        products_to_send_id = list(map(lambda product: product.id, products_to_send))
-        # print(usersToSend, products_ids, products_to_send, products_to_send_id, sep="\n")
+        products_to_send_id = list(map(lambda product: product.id,
+                                       products_to_send))
+        # print(usersToSend, products_ids, products_to_send,
+        # products_to_send_id, sep="\n")
 
         for userId, items in usersToSend.items():
             for item in (
