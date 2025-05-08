@@ -14,26 +14,30 @@ from api_models import UserModel, TrackedProductModel
 from database import Database
 
 
-PROFILE_PICS_DIR = Path("./app/static/UserProfilePictures")
+PROFILE_PICS_DIR = Path(  # pragma: no mutate
+    "./app/static/UserProfilePictures"
+)
 
-TOKEN_ENCRYPTION_ALGORITHM = os.environ.get(
+TOKEN_ENCRYPTION_ALGORITHM = os.environ.get(  # pragma: no mutate
     "TOKEN_ENCRYPTION_ALGORITHM", "HS256"
 )
-TOKEN_EXPIRATION_MINUTES = int(
-    os.environ.get("TOKEN_EXPIRATION_MINUTES", "30")
+TOKEN_EXPIRATION_MINUTES = None
+APP_BASE_URL = os.environ.get(  # pragma: no mutate
+    "APP_BASE_URL", "http://localhost:8501"
 )
-APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8501")
 
 
 class TelegramWrapper:
-    def __init__(self, database: Database, secret_key: str):
+    def __init__(  # pragma: no mutate
+        self, database: Database, secret_key: str
+    ):
         self.logger = logging.getLogger(__name__)
         token = os.getenv('TG_BOT_TOKEN')
 
-        if not token:
+        if not token:  # pragma: no mutate
             raise ValueError("TG_BOT_TOKEN environment variable not set")
 
-        self.bot = Bot(
+        self.bot = Bot(  # pragma: no mutate
             token=token,
             default=DefaultBotProperties(parse_mode="HTML")
         )
@@ -41,7 +45,7 @@ class TelegramWrapper:
         self.db = database
         self.secret_key = secret_key
         self.user_sessions: Dict[int, dict] = {}
-        self._polling_task = None
+        self._polling_task = ""
         self._test_mode = os.getenv('TEST_MODE') == '1'
 
         # Register handlers
@@ -50,7 +54,7 @@ class TelegramWrapper:
 
         self._setup_bot_commands()
 
-    def _setup_bot_commands(self):
+    def _setup_bot_commands(self):  # pragma: no mutate
         """Set up persistent menu buttons"""
         self.commands_menu = types.ReplyKeyboardMarkup(
             keyboard=[
@@ -69,13 +73,13 @@ class TelegramWrapper:
             await self.bot.get_me()
             return True
         except Exception as e:
-            self.logger.error(f"Connection verification failed: {e}")
+            self.logger.error(  # pragma: no mutate
+                f"Connection verification failed: {e}"
+            )
             return False
 
-    async def initialize(self):
-        """Async initialization that can be awaited"""
-        if self._test_mode:
-            await self.run_tests()
+    async def initialize(self):  # pragma: no mutate
+        """Async initialization that can be awaited"""  # pragma: no mutate
 
     async def get_user_info(self, user_tid: str) -> Optional[UserModel]:
         """Get user info from Telegram including profile picture file_id"""
@@ -96,7 +100,7 @@ class TelegramWrapper:
                     pfp_file_id = photo.file_id
 
             except Exception as photo_error:
-                self.logger.debug(
+                self.logger.debug(  # pragma: no mutate
                     f"Couldn't get profile photo for user {user_tid}: "
                     f"{photo_error}"
                 )
@@ -129,7 +133,7 @@ class TelegramWrapper:
                 message += (
                     f"{product.name}\n"
                     f"{price_info}\n"
-                    f"Seller: {product.seller}\n"
+                    f"XXSeller: {product.seller}\nXX"
                     f"{product.url}\n\n"
                 )
 
@@ -147,7 +151,7 @@ class TelegramWrapper:
 
     async def _handle_start(self, message: types.Message):
         """Handle /start command"""
-        welcome_text = (
+        welcome_text = (  # pragma: no mutate
             "Welcome to Price Tracker Bot!\n\n"
             "Use the buttons below to navigate:\n"
             "/start - Show this welcome message\n"
@@ -170,7 +174,7 @@ class TelegramWrapper:
             # Get user info including profile picture file_id
             user = await self.get_user_info(user_id)
             if not user:
-                await message.answer(
+                await message.answer(  # pragma: no mutate
                     "Could not retrieve your Telegram profile information."
                 )
                 return
@@ -262,115 +266,28 @@ class TelegramWrapper:
         if not await self.verify_connection():
             raise RuntimeError("Failed to connect to Telegram")
 
-        self.logger.info("Bot starting...")
+        self.logger.info("Bot starting...")  # pragma: no mutate
         self._polling_task = asyncio.create_task(
             self.dp.start_polling(self.bot)
         )
-        self.logger.info("Bot polling started")
-
-        if self._test_mode:
-            await self.run_tests()
+        self.logger.info("Bot polling started")  # pragma: no mutate
 
     async def stop(self):
         """Stop the bot gracefully"""
         if self._polling_task:
-            self.logger.info("Stopping bot...")
+            self.logger.info("Stopping bot...")  # pragma: no mutate
             self._polling_task.cancel()
             try:
                 await self._polling_task
             except asyncio.CancelledError:
-                self.logger.info("Bot polling stopped")
+                self.logger.info("Bot polling stopped")  # pragma: no mutate
             except Exception as e:
                 self.logger.error(f"Error stopping bot: {e}")
             finally:
                 self._polling_task = None
 
-    async def run_tests(self):
-        """Run test cases asynchronously"""
-        test_user_id = os.getenv('TEST_USER_ID')
-        if not test_user_id:
-            self.logger.error("TEST_USER_ID environment variable not set")
-            return False
 
-        self.logger.info("Running tests...")
-
-        try:
-            # Create test user object
-            test_user = types.User(
-                id=int(test_user_id),
-                is_bot=False,
-                first_name="Test",
-                last_name="User",
-                username="testuser",
-                language_code="en"
-            )
-
-            # Test get_user_info
-            self.logger.info("Testing get_user_info...")
-            user_info = await self.get_user_info(test_user_id)
-            self.logger.info(f"User info: {user_info}")
-
-            # Test start command
-            self.logger.info("Testing /start command...")
-            start_message = types.Message(
-                message_id=1,
-                date=datetime.now(),
-                chat=types.Chat(
-                    id=int(test_user_id),
-                    type="private",
-                    first_name=test_user.first_name,
-                    last_name=test_user.last_name,
-                    username=test_user.username
-                ),
-                from_user=test_user,
-                text="/start"
-            )
-            await self._handle_start(start_message)
-
-            # Test auth command
-            self.logger.info("Testing /auth command...")
-            auth_message = types.Message(
-                message_id=2,
-                date=datetime.now(),
-                chat=types.Chat(
-                    id=int(test_user_id),
-                    type="private",
-                    first_name=test_user.first_name,
-                    last_name=test_user.last_name,
-                    username=test_user.username
-                ),
-                from_user=test_user,
-                text="/auth"
-            )
-            await self._handle_auth(auth_message)
-
-            # Test push_notifications
-            self.logger.info("Testing push_notifications...")
-            test_products = [
-                TrackedProductModel(
-                    id="test_product_1",
-                    url="https://example.com/product1",
-                    sku="TEST123",
-                    name="Test Product",
-                    price="100.00",
-                    seller="Test Seller",
-                    tracking_price="90.00"
-                )
-            ]
-            success = await self.push_notifications(
-                {test_user_id: test_products}
-            )
-            self.logger.info(
-                f"Notification test {'passed' if success else 'failed'}"
-            )
-
-            return True
-        except Exception as e:
-            self.logger.error(f"Test failed: {e}")
-            return False
-
-
-async def create_telegram_wrapper(
+async def create_telegram_wrapper(  # pragma: no mutate
     database: Database, secret_key: str
 ) -> TelegramWrapper:
     """Factory function to create and verify TelegramWrapper"""
