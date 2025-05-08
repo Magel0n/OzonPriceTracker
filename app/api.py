@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to start Telegram bot: {e}")
         raise
 
-    scraper = OzonScraper(database, tgwrapper)
+    scraper = OzonScraper(tgwrapper)
 
     # Store components in app state
     app.state.database = database
