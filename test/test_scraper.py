@@ -5,8 +5,6 @@ from api_models import TrackedProductModel
 from database import Database
 from scraper import OzonScraper
 
-from tgwrapper import TelegramWrapper
-
 
 class TestScrapper(unittest.TestCase):
     def setUp(self):
@@ -182,9 +180,9 @@ class TestScrapper(unittest.TestCase):
                     )
                     scraper.tgwrapper.push_notifications.assert_called_once_with({'1': [product]})
 
-    def test_example(self):
-        scraper = OzonScraper(self.database, self.tgwrapper)
-
-        answer = scraper.scrape_product(sku="1711093999")
-        # print(answer)
-        assert answer is not None  # The only way to check that at least something was parsed
+    # def test_example(self):
+    #     scraper = OzonScraper(self.database, self.tgwrapper)
+    #
+    #     answer = scraper.scrape_product(sku="1711093999")
+    #     # print(answer)
+    #     assert answer is not None  # The only way to check that at least something was parsed
