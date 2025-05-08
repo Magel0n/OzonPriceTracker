@@ -25,45 +25,57 @@ class OzonScraper:
     def update_loop(self):
         self.database = Database()
         job = self.update_offers_job
+        # print("Started the update loop")
         while True:
-            job = job()
             time.sleep(self.update_time)
+            job = job()
 
     def update_offers_job(self):
         products = self.database.get_products()
         urls = []
+        # print("Started the update_offers_job")
         for product in products:
-            if product.url == "https://www.ozon.ru/product/" + product.sku:
+            if product.url is None:
                 urls.append(product.sku)
             else:
                 urls.append(product.url)
 
+        # print("Started the _get_price_for_products")
         new_prices = self._get_price_for_products(urls)
+        # print("Ended the _get_price_for_products")
         products_to_send: list[TrackedProductModel] = []
         for product, newPrice in zip(products, new_prices):
             if newPrice is None:
                 continue
 
-            if float(product.price) < newPrice:
+            if float(product.price) > newPrice:
                 products_to_send.append(product)
 
             product.price = str(newPrice)
 
+        # print("Ended products phase\nUpdating database normal")
         self.database.update_products(products)
+        # print("Ended database update\nUpdating database history")
         products_ids = [product.id for product in products]
         self.database.add_to_price_history(products_ids, int(time.time()))
+        # print("Ended database update\nGetting users to send notifications")
         usersToSend = self.database.get_users_by_products(products_to_send)
 
         users_to_products: dict[str, list[TrackedProductModel]] = {}
+        products_to_send_id = list(map(lambda product: product.id, products_to_send))
+        # print(usersToSend, products_ids, products_to_send, products_to_send_id, sep="\n")
 
         for userId, items in usersToSend.items():
             for item in (
-                    filter(lambda x: x in products_to_send, items)):
-                if users_to_products[str(userId)]:
+                    filter(lambda x: x.id in products_to_send_id, items)):
+                # print(users_to_products, item, userId)
+                if str(userId) not in users_to_products.keys():
+                    # print("creating a new item")
                     users_to_products[str(userId)] = [item]
                 else:
+                    # print("Appending to existing item")
                     users_to_products[str(userId)].append(item)
-
+        # print(users_to_products)
         self.tgwrapper.push_notifications(users_to_products)
         return self.update_offers_job
 
@@ -116,7 +128,7 @@ class OzonScraper:
             return None
 
         if sku is None:
-            sku = ""
+            sku = self._create_sku_from_url(correct_url)
 
         if url is None:
             url = correct_url
@@ -142,7 +154,9 @@ class OzonScraper:
                 return prices
         except Exception as e:
             print(e)
-            return [None] * len(urls)
+            while (len(prices) < len(urls)):
+                prices.append(None)
+            return prices
 
     def _selenium_get_name_for_product(self, sb: seleniumbase.SB)\
             -> str | None:
@@ -183,8 +197,12 @@ class OzonScraper:
                 result = sb.find_elements(elem)
                 if result:
                     result = result[0].text
-                    result = int("".join(result[:-1].split("\u2009")))
-                    return result
+                    try:
+                        result = int("".join(result[:-1].split("\u2009")))
+                        return result
+                    except ValueError:
+                        print("Failed to parse price", result)
+                        return None
                 sb.sleep(1)
             if self.keepFailure:
                 sb.save_page_source("failurePrice")
@@ -255,3 +273,32 @@ class OzonScraper:
 
         else:
             return None
+
+    def _create_sku_from_url(self, url: str) -> str:
+        if url is None:
+            return ""
+
+        splitted: list[str] = url.split("/")
+
+        if splitted[0] == "https:" or splitted[0] == "http:":
+            if splitted[1] == "":
+                splitted = splitted[2:]
+            else:
+                return ""
+
+        if len(splitted) < 3:
+            return ""
+
+        if splitted[0] == "www.ozon.ru":
+            if splitted[1] != "product":
+                return ""
+            if splitted[2] == "":
+                return ""
+
+            if splitted[2].split("-"):
+                try:
+                    sku = int(splitted[2].split("-")[-1])
+                    return str(sku)
+                except ValueError:  # No sku found
+                    return ""
+        return ""
