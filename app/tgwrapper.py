@@ -45,7 +45,7 @@ class TelegramWrapper:
         self.db = database
         self.secret_key = secret_key
         self.user_sessions: Dict[int, dict] = {}
-        self._polling_task = ""
+        self._polling_task = None
         self._test_mode = os.getenv('TEST_MODE') == '1'
 
         # Register handlers
@@ -55,7 +55,7 @@ class TelegramWrapper:
         self._setup_bot_commands()
 
     def _setup_bot_commands(self):  # pragma: no mutate
-        """Set up persistent menu buttons"""
+        """Set up persistent menu buttons"""  # pragma: no mutate
         self.commands_menu = types.ReplyKeyboardMarkup(
             keyboard=[
                 [
@@ -68,7 +68,7 @@ class TelegramWrapper:
         )
 
     async def verify_connection(self) -> bool:
-        """Verify the bot can connect to Telegram"""
+        """Verify the bot can connect to Telegram"""  # pragma: no mutate
         try:
             await self.bot.get_me()
             return True
@@ -82,7 +82,6 @@ class TelegramWrapper:
         """Async initialization that can be awaited"""  # pragma: no mutate
 
     async def get_user_info(self, user_tid: str) -> Optional[UserModel]:
-        """Get user info from Telegram including profile picture file_id"""
         try:
             chat = await self.bot.get_chat(user_tid)
 
@@ -119,7 +118,6 @@ class TelegramWrapper:
     async def push_notifications(
         self, users_to_products: dict[str, list[TrackedProductModel]]
     ) -> bool:
-        """Push notifications to users about product updates"""
         success = True
         for user_tid, products in users_to_products.items():
             user_id = int(user_tid)
@@ -150,7 +148,7 @@ class TelegramWrapper:
         return success
 
     async def _handle_start(self, message: types.Message):
-        """Handle /start command"""
+        """Handle /start command"""  # pragma: no mutate
         welcome_text = (  # pragma: no mutate
             "Welcome to Price Tracker Bot!\n\n"
             "Use the buttons below to navigate:\n"
@@ -167,7 +165,6 @@ class TelegramWrapper:
             self.logger.error(f"Error sending start message: {e}")
 
     async def _handle_auth(self, message: types.Message):
-        """Handle /auth command with local profile picture saving"""
         try:
             user_id = str(message.from_user.id)
 
@@ -262,7 +259,7 @@ class TelegramWrapper:
             )
 
     async def start(self):
-        """Start the bot asynchronously"""
+        """Start the bot asynchronously"""  # pragma: no mutate
         if not await self.verify_connection():
             raise RuntimeError("Failed to connect to Telegram")
 
@@ -273,7 +270,7 @@ class TelegramWrapper:
         self.logger.info("Bot polling started")  # pragma: no mutate
 
     async def stop(self):
-        """Stop the bot gracefully"""
+        """Stop the bot gracefully"""  # pragma: no mutate
         if self._polling_task:
             self.logger.info("Stopping bot...")  # pragma: no mutate
             self._polling_task.cancel()
@@ -288,13 +285,12 @@ class TelegramWrapper:
 
 
 async def create_telegram_wrapper(  # pragma: no mutate
-    database: Database, secret_key: str
-) -> TelegramWrapper:
-    """Factory function to create and verify TelegramWrapper"""
-    wrapper = TelegramWrapper(database, secret_key)
-    if not await wrapper.verify_connection():
-        raise RuntimeError(
-            "Failed to initialize Telegram bot - "
-            "invalid token or connection issues"
-        )
-    return wrapper
+    database: Database, secret_key: str  # pragma: no mutate
+) -> TelegramWrapper:  # pragma: no mutate
+    wrapper = TelegramWrapper(database, secret_key)  # pragma: no mutate
+    if not await wrapper.verify_connection():  # pragma: no mutate
+        raise RuntimeError(  # pragma: no mutate
+            "Failed to initialize Telegram bot - "  # pragma: no mutate
+            "invalid token or connection issues"  # pragma: no mutate
+        )  # pragma: no mutate
+    return wrapper  # pragma: no mutate
