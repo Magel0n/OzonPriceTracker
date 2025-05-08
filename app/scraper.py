@@ -1,30 +1,29 @@
+import os
 import time
+import threading
 
 import seleniumbase
 
 from api_models import TrackedProductModel
 from database import Database
 from tgwrapper import TelegramWrapper
-import threading
 
 
 class OzonScraper:
     database: Database
 
-    def __init__(self, database: Database, tgwrapper: TelegramWrapper, headlessness: bool = False,
-                 keepfailure: bool = False, update_time: int = 60 * 60 * 24):
-        self.keepFailure = keepfailure
+    def __init__(self, database: Database, tgwrapper: TelegramWrapper):
+        self.headlessness: bool = bool(os.environ.get("scraper_headlessness", False))
+        self.update_time: int = int(os.environ.get("scraper_update_time", 60 * 60 * 24))
+        self.keepFailure: bool = bool(os.environ.get("scraper_keepFailure", False))
         self.database = database
-        self.headlessness = headlessness
         self.tgwrapper = tgwrapper
-        self.update_time = update_time
         threading.Thread(target=self.update_offers_job(), args=[self], daemon=True).start()
 
     # Should run every so often, implementation and other details are up to you lmao
     # Use Database.get_products, Database.update_products, Database.get_users_by_products
     # TelegramWrapper.push_notifications, Database.add_to_price_history
     def update_offers_job(self) -> None:
-        threading.Timer(self.update_time, self.update_offers_job, args=[self]).start()
         products = self.database.get_products()
         urls = []
         for product in products:
@@ -46,6 +45,7 @@ class OzonScraper:
 
         self.database.update_products(products)
         products_ids = [product.id for product in products]
+        print(time.time())
         self.database.add_to_price_history(products_ids, int(time.time()))
         usersToSend = self.database.get_users_by_products(products_to_send)
 
@@ -60,6 +60,9 @@ class OzonScraper:
                     users_to_products[str(userId)].append(item)
 
         self.tgwrapper.push_notifications(users_to_products)
+        timer = threading.Timer(self.update_time, self.update_offers_job, args=[self])
+        timer.daemon = True
+        timer.start()
 
     # Should return product info by sku or url
     # use sku or url to find everything else
@@ -121,21 +124,52 @@ class OzonScraper:
             with seleniumbase.SB(undetectable=True, headless=self.headlessness) as sb:
                 for url in urls:
                     sb.uc_open_with_reconnect(url, 4)
-                    price = sb.find_elements(".m1q_28")
-                    i = 0
-                    while not price:
-                        if i == 3:
-                            break
-                        price = sb.find_elements(".m1q_28")
-                        sb.sleep(1)
-                        i += 1
-                    price = price[0].text
-                    price = int("".join(price[:-1].split("\u2009")))
-                    prices.append(price)
+                    price = self._selenium_get_price_for_product(sb)
                 return prices
         except Exception as e:
             print(e)
             return [None] * len(urls)
+
+    def _selenium_get_name_for_product(self, sb: seleniumbase.SB) -> str | None:
+        known_names = [".m2q_28", ".m1q_28", ".m3q_28"]
+        for i in range(3):
+            for elem in known_names:
+                result = sb.find_elements(elem)
+                if result:
+                    return result[0].text
+                sb.sleep(1)
+            if self.keepFailure:
+                sb.save_page_source("failureName")
+        return None
+
+    def _selenium_get_seller_for_product(self, sb: seleniumbase.SB) -> str | None:
+        known_names = [".tsCompactControl500Medium > span:nth-child(1)",
+                       "div.tsCompactControl500Medium > span:nth-child(1)", ".m5p_28",
+                       ".y6k_28 > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > "
+                       "a:nth-child(1)"]
+        for i in range(3):
+            for elem in known_names:
+                result = sb.find_elements(elem)
+                if result:
+                    return result[0].text
+                sb.sleep(1)
+            if self.keepFailure:
+                sb.save_page_source("failureSeller")
+        return None
+
+    def _selenium_get_price_for_product(self, sb: seleniumbase.SB) -> int | None:
+        known_names = [".m6p_28", ".m5p_28", "div.m5p_28"]
+        for i in range(3):
+            for elem in known_names:
+                result = sb.find_elements(elem)
+                if result:
+                    result = result[0].text
+                    result = int("".join(result[:-1].split("\u2009")))
+                    return result
+                sb.sleep(1)
+            if self.keepFailure:
+                sb.save_page_source("failurePrice")
+        return None
 
     def _get_info_for_product(self, url: str) -> (str | None, int | None, str | None):
         """
@@ -155,66 +189,12 @@ class OzonScraper:
         try:
             with seleniumbase.SB(undetectable=True, headless=self.headlessness) as sb:
                 sb.uc_open_with_reconnect(url, 4)
-                for i in range(3):
-                    name = sb.find_elements(".m1q_28")
-                    if not name:
-                        name = sb.find_elements(".m1q_28")
 
-                    if not name:
-                        if self.keepFailure:
-                            sb.save_page_source("failureName")
-                        # print("No name found")
-                        name = None
-                    if name is not None:
-                        name = name[0].text
-                        break
+                name = self._selenium_get_name_for_product(sb)
+                seller = self._selenium_get_seller_for_product(sb)
+                price = self._selenium_get_price_for_product(sb)
 
-                    sb.sleep(1)
-                # print(name)
-
-                for i in range(3):
-                    seller = sb.find_elements(".tsCompactControl500Medium > span:nth-child(1)")
-                    if not seller:
-                        seller = sb.find_elements("div.tsCompactControl500Medium > span:nth-child(1)")
-                    if not seller:
-                        seller = sb.find_elements("div.sk4_28:nth-child(2) > a:nth-child(1)")
-                    if not seller:
-                        seller = sb.find_elements(".m5p_28")
-
-                    if not seller:
-                        if self.keepFailure:
-                            sb.save_page_source("failureSeller")
-                        # print("No seller found")
-                        seller = None
-                    if seller is not None:
-                        seller = seller[0].text
-                        break
-
-                    sb.sleep(1)  # Does not improve much
-                # print(seller)
-
-                for i in range(3):
-                    price = sb.find_elements(".m5p_28")
-                    if not price:
-                        price = sb.find_elements("div.m5p_28")
-
-                    if not price:
-                        if self.keepFailure:
-                            sb.save_page_source("failurePrice")
-                        # print("No price found")
-                        price = None
-                    if price is not None:
-                        price = price[0].text
-                        price = int("".join(price[:-1].split("\u2009")))
-                        break
-
-                    sb.sleep(1)
-
-                price = sb.find_elements(".m5p_28")[0].text
-                # print(price)
-                price = int("".join(price[:-1].split("\u2009")))
-
-            return name, price, seller
+                return name, price, seller
         except Exception as e:
             print(e)
             return None, None, None
@@ -258,18 +238,22 @@ class OzonScraper:
 
 if __name__ == '__main__':
     database = Database()
-    scraper = OzonScraper(database, TelegramWrapper(database, "123"), headlessness=True, keepfailure=True, update_time=60)
+    scraper = OzonScraper(database, TelegramWrapper(database, "123"))
 
-    url1 = "https://www.ozon.ru/product/spalnyy-meshok-rsp-sleep-450-big-225-90-sm-molniya-sprava-1711093999/"
-    url2 = "https://www.ozon.ru/product/palatka-4-mestnaya-2031340268/"
-    url3 = ("https://www.ozon.ru/product/arbuznyy-instrument-iz-nerzhaveyushchey-stali-dlya-narezki-iskusstvennyh"
-            "-priborov-nozh-instrumenty-1691927723/")
+    print(scraper.keepFailure)
+    print(scraper.headlessness)
+    print(scraper.update_time)
 
-    url11 = "https://www.ozon.ru/product/spalnyy-meshok-turisticheskiy-golden-shark-elbe-450-xl-pravaya-molniya-1950697799/?at=jYtZoW3qgfRmpMwgC6NjPA5c4Q2j7EtXY392WU77N8wn"
-
-    url = scraper._check_url(url1)
-    print(scraper._check_url(url1))
-    print(scraper.scrape_product(url=url1))
-    print(scraper.scrape_product(url=url2))
-    print(scraper.scrape_product(url=url3))
-    print(scraper.scrape_product(url=url11))
+    # url1 = "https://www.ozon.ru/product/spalnyy-meshok-rsp-sleep-450-big-225-90-sm-molniya-sprava-1711093999/"
+    # url2 = "https://www.ozon.ru/product/palatka-4-mestnaya-2031340268/"
+    # url3 = ("https://www.ozon.ru/product/arbuznyy-instrument-iz-nerzhaveyushchey-stali-dlya-narezki-iskusstvennyh"
+    #         "-priborov-nozh-instrumenty-1691927723/")
+    #
+    # url11 = "https://www.ozon.ru/product/spalnyy-meshok-turisticheskiy-golden-shark-elbe-450-xl-pravaya-molniya-1950697799/?at=jYtZoW3qgfRmpMwgC6NjPA5c4Q2j7EtXY392WU77N8wn"
+    #
+    # url = scraper._check_url(url1)
+    # print(scraper._check_url(url1))
+    # print(scraper.scrape_product(url=url1))
+    # print(scraper.scrape_product(url=url2))
+    # print(scraper.scrape_product(url=url3))
+    # print(scraper.scrape_product(url=url11))
