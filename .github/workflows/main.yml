@@ -74,15 +74,18 @@ jobs:
       - name: Install poetry
         uses: abatilo/actions-poetry@v4
 
+      - name: Poetry preparation
+        run: poetry install
+
       - name: Run Bandit
-        run: bash <(curl -s https://raw.githubusercontent.com/CICDToolbox/bandit/master/pipeline.sh) --exclude test/
+        run: poetry run bandit -r app/ -x test/
 
       - name: Run Snyk for only severe vulnerabilities
         uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high
+          args: --severity-threshold=high --exclude=test/**
 
   # performance:
   #   runs-on: ubuntu-latest
