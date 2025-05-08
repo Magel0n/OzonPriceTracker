@@ -70,7 +70,7 @@ class Database:
         return True
 
     # All products passed should have id so they can overwrite existing stuff.
-    # True if any is updated, false - otherwise
+    # If Successful - True, Error - False
     def update_products(self, products: list[TrackedProductModel]) -> bool:
         cursor = self.conn.cursor()
 
@@ -84,9 +84,7 @@ class Database:
             """, (p.url, p.sku, p.name,
                   p.price, p.seller, p.tracking_price, p.id))
             return len(cursor.fetchall())
-        res = sum([lmb(prod) for prod in products])
-        if res == 0:
-            return False
+        [lmb(prod) for prod in products]
         self.conn.commit()
         cursor.close()
         return True
@@ -124,7 +122,7 @@ class Database:
         return ret
 
     # Should add or update entry into tracking.
-    # True - inserted, False - updated
+    # If Successful - True, Error - False
     def add_tracking(self, tracking_info: TrackingModel) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -144,13 +142,10 @@ class Database:
                   tracking_info.product_id,
                   tracking_info.new_price))
             cursor.fetchall()
-            ret = True
-        else:
-            ret = False
 
         self.conn.commit()
         cursor.close()
-        return ret
+        return True
 
     def get_user(self, tid: int) -> UserModel | None:
         cursor = self.conn.cursor()
@@ -239,7 +234,7 @@ class Database:
         return results
 
     # Adds updated price information to history table
-    # In case if all products present - True, False - otherwise
+    # If Successful - True, Error - False
     def add_to_price_history(self, product_ids: list[int], time: int) -> bool:
         cursor = self.conn.cursor()
 
@@ -281,7 +276,8 @@ class Database:
         cursor.close()
         return sorted(ret, key=lambda x: x[1])
 
-    # Returns True if deleted, False - if not found
+    # Deleted given tracking
+    # If not deleted anything - False, otherwise - True
     def delete_tracking(self, tracking_info: TrackingModel) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("""
