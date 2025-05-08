@@ -1,243 +1,338 @@
 import pytest
 from unittest.mock import patch, MagicMock
-import streamlit as st
-from app import (
-    make_api_request,
-    check_auth,
-    auth_gate,
-    display_user_info,
-    add_product_form,
-    product_search,
-    main
-)
+from streamlit.testing.v1 import AppTest
+import os
+import json
 
-# Fixtures for common test setups
-@pytest.fixture
-def mock_requests():
-    with patch('app.requests') as mock:
-        yield mock
+# Set test environment variables
+os.environ["API_BASE_URL"] = "http://test-api:12345"
+os.environ["STATIC_FILES_URL"] = "http://test-static:12345/static"
+
 
 @pytest.fixture
-def mock_st():
-    with patch('app.st') as mock:
-        yield mock
+def mock_auth_success():
+    with patch("app.requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"user_tid": "test123"}
+        mock_get.return_value = mock_response
+        yield
 
-@pytest.fixture
-def mock_session_state():
-    return {
-        "auth_token": "test_token",
-        "user_tid": "12345"
-    }
-
-@pytest.fixture
-def mock_query_params():
-    return {"token": "test_token"}
 
 @pytest.fixture
 def mock_user_data():
-    return {
-        "user": {
-            "name": "Test User",
-            "username": "testuser",
-            "user_pfp": "test_pfp"
-        },
-        "tracked_products": [
-            {
-                "id": "1",
-                "name": "Test Product",
-                "price": "100.00",
-                "seller": "Test Seller",
-                "url": "http://test.com",
-                "tracking_price": "90.00"
-            }
-        ]
-    }
+    with patch("app.requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "user": {
+                "name": "Test User",
+                "username": "testuser",
+                "user_pfp": "test_pfp"
+            },
+            "tracked_products": [
+                {
+                    "id": "1",
+                    "name": "Test Product",
+                    "price": "100.00",
+                    "seller": "Test Seller",
+                    "url": "http://test.com",
+                    "tracking_price": "90.00"
+                }
+            ]
+        }
+        mock_get.return_value = mock_response
+        yield
 
 
-def test_make_api_request_success(mock_requests):
-    # Setup mock response
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"key": "value"}
-    mock_requests.get.return_value = mock_response
-
-    # Set auth token
-    st.session_state.auth_token = "test_token"
-
-    # Test successful GET request
-    result, error = make_api_request("/test")
-    assert result == {"key": "value"}
-    assert error is None
-    mock_requests.get.assert_called_once_with(
-        "http://localhost:12345/test",
-        headers={"Authorization": "Bearer test_token"}
-    )
+@pytest.fixture
+def mock_empty_products():
+    with patch("app.requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "user": {
+                "name": "Test User",
+                "username": "testuser",
+                "user_pfp": "test_pfp"
+            },
+            "tracked_products": []
+        }
+        mock_get.return_value = mock_response
+        yield
 
 
-def test_make_api_request_unauthorized(mock_requests):
-    # Setup mock response
-    mock_response = MagicMock()
-    mock_response.status_code = 401
-    mock_requests.get.return_value = mock_response
-
-    # Test unauthorized
-    st.session_state.auth_token = "test_token"
-    result, error = make_api_request("/test")
-    assert result is None
-    assert 'Unauthorized' in error
-
-
-def test_make_api_request_no_auth():
-    # Test no authentication
-    st.session_state.auth_token = None
-    result, error = make_api_request("/test")
-    assert result is None
-    assert error == "Not authenticated"
+@pytest.fixture
+def mock_price_history():
+    with patch("app.requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "history": [
+                [1625097600, 100.0],
+                [1625184000, 95.0]
+            ]
+        }
+        mock_get.return_value = mock_response
+        yield
 
 
-def test_check_auth_with_token(mock_requests, mock_query_params):
-    # Setup
-    st.session_state.auth_token = None
-    st.query_params = mock_query_params
+def test_auth_gate():
+    """Test that unauthenticated users see the auth gate"""
+    at = AppTest.from_file("app/app.py")
+    at.run()
 
-    # Mock successful token verification
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"user_tid": "12345"}
-    mock_requests.get.return_value = mock_response
-
-    assert check_auth() is True
-    assert st.session_state.auth_token == "test_token"
-    assert st.session_state.user_tid == "12345"
+    assert at.title[0].value == "🔒 Product Price Tracker"
+    assert "Login with Telegram" in at.markdown[0].value
+    assert not at.session_state.get("auth_token")
 
 
-def test_check_auth_already_authenticated():
-    # Setup
-    st.session_state.auth_token = "existing_token"
-    st.session_state.user_tid = "12345"
+def test_successful_auth(mock_auth_success):
+    """Test successful authentication flow"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
 
-    assert check_auth() is True
-
-
-def test_check_auth_failed_verification(mock_requests, mock_query_params):
-    # Setup
-    st.session_state.auth_token = None
-    st.query_params = mock_query_params
-
-    # Mock failed token verification
-    mock_response = MagicMock()
-    mock_response.status_code = 401
-    mock_requests.get.return_value = mock_response
-
-    assert check_auth() is False
-    assert st.session_state.auth_token is None
+    assert at.session_state.auth_token == "test_token"
+    assert at.session_state.user_tid == "test123"
+    assert "🎨 Menu" in at.sidebar.title[0].value
 
 
-def test_auth_gate(mock_st):
-    auth_gate()
+def test_failed_auth():
+    """Test failed authentication"""
+    with patch("app.requests.get") as mock_get:
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_get.return_value = mock_response
 
-    mock_st.title.assert_called_once_with("🔒 Product Price Tracker")
-    mock_st.markdown.assert_called_once()
-    mock_st.stop.assert_called_once()
+        at = AppTest.from_file("app/app.py")
+        at.query_params = {"token": "invalid_token"}
+        at.run()
 
-
-def test_display_user_info(mock_requests, mock_st, mock_user_data):
-    # Setup
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = mock_user_data
-    mock_requests.get.return_value = mock_response
-
-    # Mock history response
-    mock_history_response = MagicMock()
-    mock_history_response.status_code = 200
-    mock_history_response.json.return_value = {
-        "history": [
-            [1625097600, 100.0],
-            [1625184000, 95.0]
-        ]
-    }
-    mock_requests.get.side_effect = [mock_response, mock_history_response]
-
-    display_user_info()
-
-    # Verify profile display
-    mock_st.markdown.assert_called()
-    assert "Test User" in mock_st.markdown.call_args_list[0][0][0]
-
-    # Verify product display
-    mock_st.header.assert_called_with("📊 Your Tracked Products")
-    mock_st.expander.assert_called()
-
-    # Verify price history
-    mock_st.subheader.assert_called_with("📈 Price History")
-    mock_st.plotly_chart.assert_called_once()
+        assert "auth_token" not in at.session_state
+        assert at.title[0].value == "🔒 Product Price Tracker"
 
 
-def test_add_product_form_by_url(mock_requests, mock_st):
-    # Setup form submission
-    mock_st.radio.return_value = "Product URL"
-    mock_st.text_input.side_effect = ["http://test.com", "90.00"]
-    mock_st.form_submit_button.return_value = True
+def test_user_profile_display(mock_auth_success, mock_user_data, mock_price_history):
+    """Test user profile display with mock data"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
 
-    # Mock API response
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"id": "1"}
-    mock_requests.post.return_value = mock_response
-    mock_requests.put.return_value = mock_response
-
-    add_product_form("12345")
-
-    # Verify API calls
-    mock_requests.post.assert_called_once_with(
-        "http://localhost:12345/tracking",
-        json={
-            "user_tid": "12345",
-            "product_url": "http://test.com",
-            "product_sku": None
-        },
-        headers={"Authorization": "Bearer None"}
-    )
-
-    mock_st.success.assert_called_with("Product added successfully!")
+    assert "Test User" in at.markdown[0].value
+    assert "📊 Your Tracked Products" in at.header[0].value
+    assert "Test Product" in at.expander[0].label
+    assert "📈 Price History" in at.subheader[0].value
+    assert len(at.plotly_chart) == 1  # Verify chart is rendered
 
 
-def test_product_search(mock_st):
-    # Setup search inputs
-    mock_st.text_input.side_effect = ["Headphones", "AudioTech"]
-    mock_st.slider.return_value = (0.0, 200.0)
-    mock_st.button.return_value = True
+def test_empty_products(mock_auth_success, mock_empty_products):
+    """Test display when no products are tracked"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
 
-    product_search("12345")
-
-    # Verify search results display
-    mock_st.header.assert_called_with("🔍 Product Search")
-    mock_st.container.assert_called()
-    mock_st.button.assert_called_with(
-        "🔎 Search Products",
-        use_container_width=True,
-        type="primary"
-    )
+    assert "You are not tracking any products yet" in at.info[0].value
+    assert len(at.expander) == 0  # No expanders for products
 
 
-def test_main_authenticated(mock_st, mock_requests):
-    # Setup authentication
-    mock_st.query_params.to_dict.return_value = {"token": "test_token"}
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"user_tid": "12345"}
-    mock_requests.get.return_value = mock_response
+def test_add_product_form_by_url(mock_auth_success):
+    """Test product form submission by URL"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
 
-    # Setup page navigation
-    mock_st.sidebar.radio.return_value = "📦 My Products"
+    # Navigate to Add Product page
+    at.sidebar.radio[0].set_value("➕ Add Product")
+    at.run()
 
-    with patch('app.display_user_info') as mock_display:
-        main()
+    # Fill out the form
+    at.radio[0].set_value("Product URL")
+    at.text_input[0].set_value("http://test-product.com")
+    at.text_input[1].set_value("100.00")
 
-        # Verify authentication
-        mock_st.set_page_config.assert_called_once()
+    with patch("app.requests.post") as mock_post, \
+            patch("app.requests.put") as mock_put:
+        post_response = MagicMock()
+        post_response.status_code = 200
+        post_response.json.return_value = {"id": "new123"}
+        mock_post.return_value = post_response
 
-        # Verify page navigation
-        mock_st.sidebar.title.assert_called_with("🎨 Menu")
-        mock_display.assert_called_once()
+        put_response = MagicMock()
+        put_response.status_code = 200
+        mock_put.return_value = put_response
+
+        at.button[0].click()
+        at.run()
+
+        assert "Product added successfully!" in at.success[0].value
+
+
+def test_add_product_form_by_sku(mock_auth_success):
+    """Test product form submission by SKU"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    at.sidebar.radio[0].set_value("➕ Add Product")
+    at.run()
+
+    at.radio[0].set_value("SKU")
+    at.text_input[0].set_value("TEST12345")
+    at.text_input[1].set_value("150.00")
+
+    with patch("app.requests.post") as mock_post:
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {"id": "new456"}
+
+        at.button[0].click()
+        at.run()
+
+        assert "product_sku" in json.dumps(mock_post.call_args[1]["json"])
+
+
+def test_add_product_form_validation(mock_auth_success):
+    """Test form validation"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    at.sidebar.radio[0].set_value("➕ Add Product")
+    at.run()
+
+    # Test empty submission
+    at.button[0].click()
+    at.run()
+    assert "Please provide" in at.error[0].value
+
+    # Test invalid price
+    at.text_input[0].set_value("https://www.ozon.ru/product/poco-smartfon-c75-8-256-gb-zelenyy-1726508242/?at=28t02plrKTmrm9qRtWN9L4PFgWR99BIR02wDI3qRM6m")
+    at.button[0].click()
+    at.run()
+    assert "price threshold" in at.error[0].value.lower()
+
+
+def test_product_search(mock_auth_success):
+    """Test product search functionality"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    at.sidebar.radio[0].set_value("🔍 Search Products")
+    at.run()
+
+    at.text_input[0].set_value("Headphones")
+    at.text_input[1].set_value("AudioTech")
+    at.slider[0].set_value((0, 200))
+
+    at.button[0].click()
+    at.run()
+
+    assert "Searching for" in at.info[0].value
+    assert "Headphones" in at.info[0].value
+    assert "AudioTech" in at.info[0].value
+
+
+def test_product_tracking_actions(mock_auth_success, mock_user_data):
+    """Test product tracking actions (update threshold, stop tracking)"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    # Test threshold update
+    with patch("app.requests.put") as mock_put:
+        mock_put.return_value.status_code = 200
+
+        at.text_input[0].set_value("80.00")  # Update threshold input
+        at.button[0].click()  # Save button
+        at.run()
+
+        assert "Threshold updated" in at.success[0].value
+        mock_put.assert_called_once()
+
+    # Test stop tracking
+    with patch("app.requests.delete") as mock_delete:
+        mock_delete.return_value.status_code = 200
+
+        at.button[0].click()  # Stop Tracking button
+        at.run()
+
+        assert "Product removed" in at.success[0].value
+        mock_delete.assert_called_once()
+
+
+def test_price_history_error(mock_auth_success, mock_user_data):
+    """Test error handling for price history"""
+    with patch("app.requests.get") as mock_get:
+        # First call for user data succeeds
+        user_response = MagicMock()
+        user_response.status_code = 200
+        user_response.json.return_value = {
+            "user": {"name": "Test User"},
+            "tracked_products": [{"id": "1", "name": "Test Product"}]
+        }
+
+        # Second call for history fails
+        history_response = MagicMock()
+        history_response.status_code = 500
+        mock_get.side_effect = [user_response, history_response]
+
+        at = AppTest.from_file("app/app.py")
+        at.query_params = {"token": "test_token"}
+        at.run()
+
+        assert "Couldn't load history" in at.warning[0].value
+
+
+def test_logout(mock_auth_success, mock_user_data):
+    """Test logout functionality"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    with patch("app.requests.get") as mock_get:
+        mock_get.return_value.status_code = 200
+
+        at.sidebar.button[0].click()  # Logout button
+        at.run()
+
+        assert "auth_token" not in at.session_state
+        assert at.title[0].value == "🔒 Product Price Tracker"
+
+
+def test_api_error_handling(mock_auth_success, mock_user_data):
+    """Test API error handling in profile display"""
+
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    with patch("app.requests.get") as mock_get:
+        at.sidebar.radio[0].set_value("📦 My Products")
+        at.run()
+        assert "Failed to load user data" in at.error[0].value
+
+
+def test_main_page_navigation(mock_auth_success, mock_user_data):
+    """Test navigation between pages"""
+    at = AppTest.from_file("app/app.py")
+    at.query_params = {"token": "test_token"}
+    at.run()
+
+    # Verify initial page
+    assert "📊 Your Tracked Products" in at.header[0].value
+
+    # Go to Add Product page
+    at.sidebar.radio[0].set_value("➕ Add Product")
+    at.run()
+    assert "Add New Product to Track" in at.subheader[0].value
+
+    # Go to Search page
+    at.sidebar.radio[0].set_value("🔍 Search Products")
+    at.run()
+    assert "Product Search" in at.header[0].value
+
+    # Return to My Products
+    at.sidebar.radio[0].set_value("📦 My Products")
+    at.run()
+    assert "📊 Your Tracked Products" in at.header[0].value
