@@ -132,18 +132,29 @@ class TestTelegramWrapper(unittest.IsolatedAsyncioTestCase):
         mock_chat.first_name = "Test"
         mock_chat.last_name = "User"
         mock_chat.username = "testuser"
-        
+    
+        # Mock profile photos response
+        mock_photo = MagicMock()
+        mock_photo.file_id = "test_file_id"
+        mock_photos = MagicMock()
+        mock_photos.photos = [[mock_photo]]  # Nested list to match actual structure
+    
         self.mock_bot.get_chat.return_value = mock_chat
-        
+        self.mock_bot.get_user_profile_photos.return_value = mock_photos
+    
         # Call method
         result = await self.wrapper.get_user_info(self.test_user_id)
-        
+    
         # Verify results
         self.assertIsInstance(result, UserModel)
         self.assertEqual(result.tid, int(self.test_user_id))
         self.assertEqual(result.name, "Test User")
         self.assertEqual(result.username, "testuser")
+        self.assertEqual(result.user_pfp, "test_file_id")
         self.mock_bot.get_chat.assert_called_once_with(self.test_user_id)
+        self.mock_bot.get_user_profile_photos.assert_called_once_with(
+            int(self.test_user_id), limit=1
+        )
 
     async def test_get_user_info_failure(self):
         """Test failed user info retrieval"""
@@ -223,19 +234,31 @@ class TestTelegramWrapper(unittest.IsolatedAsyncioTestCase):
 
     async def test_handle_auth_user_info_failure(self):
         """Test /auth command handler when user info retrieval fails"""
+        # Mock get_user_info to return None
         self.wrapper.get_user_info = AsyncMock(return_value=None)
-    
+
+        # Mock profile photos to avoid actual calls
+        self.mock_bot.get_user_profile_photos.return_value = AsyncMock()
+        self.mock_bot.get_user_profile_photos.return_value.photos = []
+
         message = self.create_mocked_message("/auth")
         await self.wrapper._handle_auth(message)
+
+        # Verify message.answer was called (not bot.send_message)
+        message.answer.assert_called_once()
     
-        # Verify bot.send_message was called (not message.answer)
-        self.mock_bot.send_message.assert_called_once()
-        args, kwargs = self.mock_bot.send_message.call_args
-        self.assertEqual(kwargs['chat_id'], int(self.test_user_id))
-        self.assertIn("Could not retrieve", kwargs['text'])
+        # Get all call arguments (both positional and keyword)
+        call_args = message.answer.call_args
+        if call_args.kwargs:  # If kwargs exist, check there
+            response_text = call_args.kwargs.get('text', '')
+        else:  # Otherwise check first positional argument
+            response_text = call_args.args[0] if call_args.args else ''
+    
+        self.assertIn("Could not retrieve", response_text)
 
     async def test_handle_auth_login_failure(self):
         """Test /auth command handler when login fails"""
+        # Create test user with None for profile picture
         mock_user = UserModel(
             tid=int(self.test_user_id),
             name="Test User",
@@ -243,17 +266,27 @@ class TestTelegramWrapper(unittest.IsolatedAsyncioTestCase):
             user_pfp=None
         )
     
+        # Mock get_user_info to return our test user
         self.wrapper.get_user_info = AsyncMock(return_value=mock_user)
+    
+        # Mock profile photos to avoid actual calls
+        self.mock_bot.get_user_profile_photos.return_value = AsyncMock()
+        self.mock_bot.get_user_profile_photos.return_value.photos = []
+    
+        # Mock database to return failure
         self.mock_db.login_user.return_value = False
     
         message = self.create_mocked_message("/auth")
         await self.wrapper._handle_auth(message)
+
+        # Get all call arguments (both positional and keyword)
+        call_args = message.answer.call_args
+        if call_args.kwargs:  # If kwargs exist, check there
+            response_text = call_args.kwargs.get('text', '')
+        else:  # Otherwise check first positional argument
+            response_text = call_args.args[0] if call_args.args else ''
     
-        # Verify bot.send_message was called (not message.answer)
-        self.mock_bot.send_message.assert_called_once()
-        args, kwargs = self.mock_bot.send_message.call_args
-        self.assertEqual(kwargs['chat_id'], int(self.test_user_id))
-        self.assertIn("Failed to authenticate", kwargs['text'])  
+        self.assertIn("Failed to authenticate", response_text)
 
     async def test_start_stop(self):
         """Test start and stop methods"""
