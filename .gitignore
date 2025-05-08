@@ -5,6 +5,9 @@ secrets.env
 
 # Quality Requirement stuff
 .coverage
+htmlcov/**
+**.bak
+.mutmut-cache
 
 # For selenium
 app/downloaded_files/*

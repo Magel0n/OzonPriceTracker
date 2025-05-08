@@ -1,10 +1,8 @@
 from pydantic import BaseModel
 
-
 class StatusResponse(BaseModel):
     success: bool
     message: str
-
 
 class UserModel(BaseModel):
     def __eq__(self, other):

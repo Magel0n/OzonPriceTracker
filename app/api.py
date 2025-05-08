@@ -90,8 +90,6 @@ async def validate_token(token: Annotated[str, Depends(HTTPBearer())]):
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        if token.scheme != "Bearer":
-            raise credentials_exception
         if token.credentials in blacklist:
             raise credentials_exception
         payload = jwt.decode(
@@ -114,8 +112,6 @@ async def validate_token_token(token: Annotated[str, Depends(HTTPBearer())]):
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        if token.scheme != "Bearer":
-            raise credentials_exception
         if token.credentials in blacklist:
             raise credentials_exception
         payload = jwt.decode(
@@ -172,6 +168,25 @@ async def add_tracking(
         raise HTTPException(
             status_code=403,
             detail="Cannot modify other user data"
+        )
+
+    existing_products = \
+        app.state.database.get_tracked_products(user_tid)
+
+    lst = [(product.url == tracking.product_url or
+            product.sku == tracking.product_sku)
+           for product in existing_products]
+    print(lst, flush=True)
+    print(existing_products[0].__dict__, flush=True)
+    print(tracking.product_url, flush=True)
+    print(tracking.product_sku, flush=True)
+
+    if any(
+        lst
+    ):
+        raise HTTPException(
+            status_code=500,
+            detail="You are already tracking this product!"
         )
 
     product = app.state.scraper.scrape_product(
@@ -274,28 +289,42 @@ async def get_product_history(
     return ProductHistoryResponse(history=history)
 
 
+def gen_filter_foo(
+    search_data: SearchProductsRequest,
+    my_products_ids: list[int]
+):
+    def filter_foo(product: TrackedProductModel) -> bool:
+        if product.id in my_products_ids:
+            return False
+        if not search_data.min_price <= float(product.price) \
+                <= search_data.max_price:
+            return False
+        if search_data.query and search_data.query.lower() \
+                not in product.name.lower():
+            return False
+        if search_data.seller and search_data.seller.lower() \
+                not in product.seller.lower():
+            return False
+        return True
+    return filter_foo
+
+
 @app.post("/search")
 async def search(
     search_data: SearchProductsRequest,
     user_tid: Annotated[int, Depends(validate_token)]
 ) -> SearchProductsResponse:
-    tracked_products = \
-        set(map(lambda item: item.product_id,
-            app.state.database.get_tracked_products(user_tid)))
 
-    def filter_foo(product: TrackedProductModel) -> bool:
-        if product.id in tracked_products:
-            return False
-        if not search_data.min_price <= float(product['price']) \
-                <= search_data.max_price:
-            return False
-        if search_data.query and search_data.query.lower() \
-                not in product['name'].lower():
-            return False
-        if search_data.seller and search_data.seller.lower() \
-                not in product['seller'].lower():
-            return False
-        return True
+    my_products = app.state.database.get_tracked_products(user_tid)
+
+    if my_products is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not get my products from database"
+        )
+
+    my_products_ids = \
+        set(map(lambda item: item.id, my_products))
 
     products = app.state.database.get_products()
 
@@ -305,7 +334,12 @@ async def search(
             detail="Could not get products from database"
         )
 
-    return SearchProductsResponse(products=filter(filter_foo, products))
+    return SearchProductsResponse(
+        products=list(filter(
+                gen_filter_foo(search_data, my_products_ids),
+                products
+        ))
+    )
 
 
 if __name__ == "__main__":
