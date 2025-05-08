@@ -45,6 +45,7 @@ class TestScrapper(unittest.TestCase):
             None,
             "",
             "https://www.amazon.com/product/123",
+            "https:/www.ozon.ru/category/123",
             "https://www.ozon.ru/category/123",
             "www.ozon.ru",
             "ozon.ru/product/123",
@@ -54,6 +55,37 @@ class TestScrapper(unittest.TestCase):
         for input_url in test_cases:
             with self.subTest(input_url=input_url):
                 self.assertIsNone(scraper._check_url(input_url))
+
+    def test_sku_checker_valid(self):
+        scraper = OzonScraper(self.tgwrapper)
+        test_cases = [
+            ("https://www.ozon.ru/product/123456", "123456"),
+            ("http://www.ozon.ru/product/456", "456"),
+            ("www.ozon.ru/product/789", "789"),
+        ]
+
+        for input_url, expected in test_cases:
+            with self.subTest(input_url=input_url):
+                self.assertEqual(scraper._create_sku_from_url(input_url), expected)
+
+    def test_sku_checker_invalid(self):
+        scraper = OzonScraper(self.tgwrapper)
+        test_cases = [
+            None,
+            "",
+            "https://www.amazon.com/product/123",
+            "https:/www.ozon.ru/category/123",
+            "https://www.ozon.ru/category/123",
+            "www.ozon.ru",
+            "ozon.ru/product/123",
+            "https://www.ozon.ru/product/",
+            "https://www.ozon.ru/product/-",
+            "https://www.ozon.ru/product/wrong",
+        ]
+
+        for input_url in test_cases:
+            with self.subTest(input_url=input_url):
+                self.assertEqual(scraper._create_sku_from_url(input_url), "")
 
     @patch('seleniumbase.SB')
     def test_get_info_for_product_valid(self, mock_sb):
@@ -111,7 +143,7 @@ class TestScrapper(unittest.TestCase):
             self.assertIsNone(scraper.scrape_product(url="invalid"))
 
     @patch('seleniumbase.SB')
-    def test__get_price_for_products(self, mock_sb):
+    def test__get_price_for_products_general(self, mock_sb):
         scraper = OzonScraper(self.tgwrapper)
         mock_instance = mock_sb.return_value.__enter__.return_value
         mock_instance.find_elements.side_effect = [
@@ -123,6 +155,20 @@ class TestScrapper(unittest.TestCase):
         urls = ["https://www.ozon.ru/product/123"] * 3
         prices = scraper._get_price_for_products(urls)
         self.assertEqual([1999, 2499, None], prices)
+
+    @patch('seleniumbase.SB')
+    def test__get_price_for_products_complete(self, mock_sb):
+        scraper = OzonScraper(self.tgwrapper)
+        mock_instance = mock_sb.return_value.__enter__.return_value
+        mock_instance.find_elements.side_effect = [
+            [MagicMock(text="1\u2009999₽")],  # Some value for first
+            [MagicMock(text="2\u2009499₽")],  # Some value for second
+            [MagicMock(text="3\u2009499₽")],  # Some value for third
+        ]
+
+        urls = ["https://www.ozon.ru/product/123"] * 3
+        prices = scraper._get_price_for_products(urls)
+        self.assertEqual([1999, 2499, 3499], prices)
 
     def test_update_offers_job_failure_to_parse(self):
         mock_db = MagicMock(spec=Database)
