@@ -85,7 +85,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --exclude=test/**
+          args: --severity-threshold=high --all-projects --exclude=test/**
 
   # performance:
   #   runs-on: ubuntu-latest
