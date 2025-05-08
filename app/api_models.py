@@ -1,10 +1,6 @@
 from pydantic import BaseModel
 
 
-class ErrorResponse(BaseModel):
-    message: str
-
-
 class StatusResponse(BaseModel):
     success: bool
     message: str
@@ -77,3 +73,15 @@ class VerifyTokenResponse(BaseModel):
 class ProductHistoryResponse(BaseModel):
     # Unix epoch seconds to price in string
     history: list[tuple[int, str]]
+
+
+class SearchProductsRequest(BaseModel):
+    query: str | None
+    seller: str | None
+    min_price: float
+    max_price: float
+
+
+class SearchProductsResponse(BaseModel):
+    # List of products that are in database but are not owned by user
+    products: list[TrackedProductModel]
