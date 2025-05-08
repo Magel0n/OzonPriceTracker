@@ -28,25 +28,27 @@ class TestDatabase(TestCase):
         self.db.login_user(user)
         return user
 
-    def _create_test_product(self, sku="sku_FF"):
+    def _create_test_product(self, sku="sku_FF", price="500"):
         product = TrackedProductModel(
             id=None,
             url="http://ozon.ru",
             sku=sku,
             name="SuperProductName",
-            price="99999",
+            price=price,
             seller="OzonStore",
             tracking_price=None)
         product_id = self.db.add_product(product)
         product.id = product_id
         return product
 
+    # Test cases begin
     def test_login_user_insert(self):
         user = UserModel(tid=1,
                          name="New",
                          username="new",
                          user_pfp="g4q34terwagt4*(&UE(*GY#&G))")
         result = self.db.login_user(user)
+        
         self.assertTrue(result)
         self.assertTrue(self.db.get_user(1).__eq__(user))
 
@@ -69,13 +71,13 @@ class TestDatabase(TestCase):
     def test_get_user_not_found(self):
         self.assertIsNone(self.db.get_user(77777))
 
-    def test_add_new_product(self):
+    def test_add_product_new(self):
         product = self._create_test_product()
         products = self.db.get_products()
         self.assertTrue(len(products) == 1)
         self.assertTrue(products[0].__eq__(product.sku))
 
-    def test_add_existing_product(self):
+    def test_add_product_existing(self):
         product1 = self._create_test_product("skuff")
         product2 = TrackedProductModel(
             id=None,
@@ -196,7 +198,7 @@ class TestDatabase(TestCase):
             url=product.url,
             sku=product.sku,
             name=product.name,
-            price="150",
+            price="250",
             seller=product.seller,
             tracking_price=None)
         self.db.update_products([updated])
@@ -205,8 +207,8 @@ class TestDatabase(TestCase):
         history = self.db.get_price_history(product.id)
 
         self.assertTrue(len(history) == 2)
-        self.assertTrue(history[0][0] == "99999")
-        self.assertTrue(history[1][0] == "150")
+        self.assertTrue(history[0][0] == "500")
+        self.assertTrue(history[1][0] == "250")
 
     def test_price_history_invalid_product(self):
         result = self.db.add_to_price_history([999], 1000)
