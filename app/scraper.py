@@ -1,69 +1,89 @@
+import os
 import time
+import threading
 
 import seleniumbase
 
 from api_models import TrackedProductModel
 from database import Database
 from tgwrapper import TelegramWrapper
-import threading
 
 
 class OzonScraper:
     database: Database
 
-    def __init__(self, database: Database, tgwrapper: TelegramWrapper, headlessness: bool = False,
-                 keepfailure: bool = False, update_time: int = 60 * 60 * 24):
-        self.keepFailure = keepfailure
-        self.database = database
-        self.headlessness = headlessness
+    def __init__(self, database: Database, tgwrapper: TelegramWrapper):
+        self.headlessness: bool = bool(
+            os.environ.get("scraper_headlessness", False))
+        self.update_time: int = int(
+            os.environ.get("scraper_update_time", 60 * 60 * 24))
+        self.keepFailure: bool = bool(
+            os.environ.get("scraper_keepFailure", False))
         self.tgwrapper = tgwrapper
-        self.update_time = update_time
-        threading.Thread(target=self.update_offers_job(), args=[self], daemon=True).start()
+        threading.Thread(target=self.update_loop, daemon=True).start()
 
-    # Should run every so often, implementation and other details are up to you lmao
-    # Use Database.get_products, Database.update_products, Database.get_users_by_products
-    # TelegramWrapper.push_notifications, Database.add_to_price_history
-    def update_offers_job(self) -> None:
-        threading.Timer(self.update_time, self.update_offers_job, args=[self]).start()
+    def update_loop(self):
+        self.database = Database()
+        job = self.update_offers_job
+        # print("Started the update loop")
+        while True:
+            time.sleep(self.update_time)
+            job = job()
+
+    def update_offers_job(self):
         products = self.database.get_products()
         urls = []
+        # print("Started the update_offers_job")
         for product in products:
-            if product.url == "https://www.ozon.ru/product/" + product.sku:
+            if product.url is None:
                 urls.append(product.sku)
             else:
                 urls.append(product.url)
 
+        # print("Started the _get_price_for_products")
         new_prices = self._get_price_for_products(urls)
+        # print("Ended the _get_price_for_products")
         products_to_send: list[TrackedProductModel] = []
         for product, newPrice in zip(products, new_prices):
             if newPrice is None:
                 continue
 
-            if product.price < newPrice:
+            if float(product.price) > newPrice:
                 products_to_send.append(product)
 
-            product.price = newPrice
+            product.price = str(newPrice)
 
+        # print("Ended products phase\nUpdating database normal")
         self.database.update_products(products)
+        # print("Ended database update\nUpdating database history")
         products_ids = [product.id for product in products]
         self.database.add_to_price_history(products_ids, int(time.time()))
+        # print("Ended database update\nGetting users to send notifications")
         usersToSend = self.database.get_users_by_products(products_to_send)
 
         users_to_products: dict[str, list[TrackedProductModel]] = {}
+        products_to_send_id = list(map(lambda product: product.id, products_to_send))
+        # print(usersToSend, products_ids, products_to_send, products_to_send_id, sep="\n")
 
         for userId, items in usersToSend.items():
-            productsForThisUser: list[TrackedProductModel] = []
-            for item in filter(lambda x: x in products_to_send, items):
-                if users_to_products[str(userId)]:
+            for item in (
+                    filter(lambda x: x.id in products_to_send_id, items)):
+                # print(users_to_products, item, userId)
+                if str(userId) not in users_to_products.keys():
+                    # print("creating a new item")
                     users_to_products[str(userId)] = [item]
                 else:
+                    # print("Appending to existing item")
                     users_to_products[str(userId)].append(item)
-
+        # print(users_to_products)
         self.tgwrapper.push_notifications(users_to_products)
+        return self.update_offers_job
 
     # Should return product info by sku or url
     # use sku or url to find everything else
-    def scrape_product(self, sku: str | None = None, url: str | None = None) -> TrackedProductModel | None:
+    def scrape_product(self,
+                       sku: str | None = None,
+                       url: str | None = None) -> TrackedProductModel | None:
         if sku is not None and url is not None:
             return None  # Why are you having both?
 
@@ -82,11 +102,14 @@ class OzonScraper:
 
         # print(correct_url)  # TODO fix url as sku possibility
 
-        name_lasting, price_lasting, seller_lasting = self._get_info_for_product(correct_url)
+        name_lasting, price_lasting, seller_lasting = (
+            self._get_info_for_product(correct_url))
         name = None
         price = None
         seller = None
-        if seller_lasting is None or price_lasting is None or name_lasting is None:
+        if (seller_lasting is None
+                or price_lasting is None
+                or name_lasting is None):
             for i in range(3):
                 name, price, seller = self._get_info_for_product(correct_url)
                 if seller_lasting is None:
@@ -105,39 +128,88 @@ class OzonScraper:
             return None
 
         if sku is None:
-            sku = ""
+            sku = self._create_sku_from_url(correct_url)
 
         if url is None:
             url = correct_url
 
-        product = TrackedProductModel(id=None, url=url, sku=sku, name=name_lasting, price=str(price_lasting),
-                                      seller=seller_lasting, tracking_price=None)
+        product = TrackedProductModel(id=None,
+                                      url=url,
+                                      sku=sku,
+                                      name=name_lasting,
+                                      price=str(price_lasting),
+                                      seller=seller_lasting,
+                                      tracking_price=None)
 
         return product
 
     def _get_price_for_products(self, urls: list[str]) -> list[int | None]:
         prices = []
         try:
-            with seleniumbase.SB(undetectable=True, headless=self.headlessness) as sb:
+            with seleniumbase.SB(undetectable=True,
+                                 headless=self.headlessness) as sb:
                 for url in urls:
                     sb.uc_open_with_reconnect(url, 4)
-                    price = sb.find_elements(".m1q_28")
-                    i = 0
-                    while not price:
-                        if i == 3:
-                            break
-                        price = sb.find_elements(".m1q_28")
-                        sb.sleep(1)
-                        i += 1
-                    price = price[0].text
-                    price = int("".join(price[:-1].split("\u2009")))
-                    prices.append(price)
+                    prices.append(self._selenium_get_price_for_product(sb))
                 return prices
         except Exception as e:
             print(e)
-            return [None] * len(urls)
+            while (len(prices) < len(urls)):
+                prices.append(None)
+            return prices
 
-    def _get_info_for_product(self, url: str) -> (str | None, int | None, str | None):
+    def _selenium_get_name_for_product(self, sb: seleniumbase.SB)\
+            -> str | None:
+        known_names = [".m2q_28", ".m1q_28", ".m3q_28"]
+        for i in range(3):
+            for elem in known_names:
+                result = sb.find_elements(elem)
+                if result:
+                    return result[0].text
+                sb.sleep(1)
+            if self.keepFailure:
+                sb.save_page_source("failureName")
+        return None
+
+    def _selenium_get_seller_for_product(self, sb: seleniumbase.SB)\
+            -> str | None:
+        known_names = [".tsCompactControl500Medium > span:nth-child(1)",
+                       "div.tsCompactControl500Medium > span:nth-child(1)",
+                       ".m5p_28",
+                       ".y6k_28 > div:nth-child(2) > "
+                       "div:nth-child(2) > div:nth-child(1)"
+                       " > div:nth-child(1) > a:nth-child(1)"]
+        for i in range(3):
+            for elem in known_names:
+                result = sb.find_elements(elem)
+                if result:
+                    return result[0].text
+                sb.sleep(1)
+            if self.keepFailure:
+                sb.save_page_source("failureSeller")
+        return None
+
+    def _selenium_get_price_for_product(self, sb: seleniumbase.SB)\
+            -> int | None:
+        known_names = [".m6p_28", ".m5p_28", "div.m5p_28"]
+        for i in range(3):
+            for elem in known_names:
+                result = sb.find_elements(elem)
+                if result:
+                    result = result[0].text
+                    try:
+                        result = int("".join(result[:-1].split("\u2009")))
+                        return result
+                    except ValueError:
+                        print("Failed to parse price", result)
+                        return None
+                sb.sleep(1)
+            if self.keepFailure:
+                sb.save_page_source("failurePrice")
+        return None
+
+    def _get_info_for_product(self, url: str) \
+            -> (str | None, int | None, str | None):
         """
         Gets the price of a product from Ozon using Selenium.
 
@@ -153,68 +225,15 @@ class OzonScraper:
         price = None
         seller = None
         try:
-            with seleniumbase.SB(undetectable=True, headless=self.headlessness) as sb:
+            with seleniumbase.SB(undetectable=True,
+                                 headless=self.headlessness) as sb:
                 sb.uc_open_with_reconnect(url, 4)
-                for i in range(3):
-                    name = sb.find_elements(".m1q_28")
-                    if not name:
-                        name = sb.find_elements(".m1q_28")
 
-                    if not name:
-                        if self.keepFailure:
-                            sb.save_page_source("failureName")
-                        # print("No name found")
-                        name = None
-                    if name is not None:
-                        name = name[0].text
-                        break
+                name = self._selenium_get_name_for_product(sb)
+                seller = self._selenium_get_seller_for_product(sb)
+                price = self._selenium_get_price_for_product(sb)
 
-                    sb.sleep(1)
-                # print(name)
-
-                for i in range(3):
-                    seller = sb.find_elements(".tsCompactControl500Medium > span:nth-child(1)")
-                    if not seller:
-                        seller = sb.find_elements("div.tsCompactControl500Medium > span:nth-child(1)")
-                    if not seller:
-                        seller = sb.find_elements("div.sk4_28:nth-child(2) > a:nth-child(1)")
-                    if not seller:
-                        seller = sb.find_elements(".m5p_28")
-
-                    if not seller:
-                        if self.keepFailure:
-                            sb.save_page_source("failureSeller")
-                        # print("No seller found")
-                        seller = None
-                    if seller is not None:
-                        seller = seller[0].text
-                        break
-
-                    sb.sleep(1)  # Does not improve much
-                # print(seller)
-
-                for i in range(3):
-                    price = sb.find_elements(".m5p_28")
-                    if not price:
-                        price = sb.find_elements("div.m5p_28")
-
-                    if not price:
-                        if self.keepFailure:
-                            sb.save_page_source("failurePrice")
-                        # print("No price found")
-                        price = None
-                    if price is not None:
-                        price = price[0].text
-                        price = int("".join(price[:-1].split("\u2009")))
-                        break
-
-                    sb.sleep(1)
-
-                price = sb.find_elements(".m5p_28")[0].text
-                # print(price)
-                price = int("".join(price[:-1].split("\u2009")))
-
-            return name, price, seller
+                return name, price, seller
         except Exception as e:
             print(e)
             return None, None, None
@@ -255,21 +274,31 @@ class OzonScraper:
         else:
             return None
 
+    def _create_sku_from_url(self, url: str) -> str:
+        if url is None:
+            return ""
 
-if __name__ == '__main__':
-    database = Database()
-    scraper = OzonScraper(database, TelegramWrapper(database, "123"), headlessness=True, keepfailure=True, update_time=60)
+        splitted: list[str] = url.split("/")
 
-    url1 = "https://www.ozon.ru/product/spalnyy-meshok-rsp-sleep-450-big-225-90-sm-molniya-sprava-1711093999/"
-    url2 = "https://www.ozon.ru/product/palatka-4-mestnaya-2031340268/"
-    url3 = ("https://www.ozon.ru/product/arbuznyy-instrument-iz-nerzhaveyushchey-stali-dlya-narezki-iskusstvennyh"
-            "-priborov-nozh-instrumenty-1691927723/")
+        if splitted[0] == "https:" or splitted[0] == "http:":
+            if splitted[1] == "":
+                splitted = splitted[2:]
+            else:
+                return ""
 
-    url11 = "https://www.ozon.ru/product/spalnyy-meshok-turisticheskiy-golden-shark-elbe-450-xl-pravaya-molniya-1950697799/?at=jYtZoW3qgfRmpMwgC6NjPA5c4Q2j7EtXY392WU77N8wn"
+        if len(splitted) < 3:
+            return ""
 
-    url = scraper._check_url(url1)
-    print(scraper._check_url(url1))
-    print(scraper.scrape_product(url=url1))
-    print(scraper.scrape_product(url=url2))
-    print(scraper.scrape_product(url=url3))
-    print(scraper.scrape_product(url=url11))
+        if splitted[0] == "www.ozon.ru":
+            if splitted[1] != "product":
+                return ""
+            if splitted[2] == "":
+                return ""
+
+            if splitted[2].split("-"):
+                try:
+                    sku = int(splitted[2].split("-")[-1])
+                    return str(sku)
+                except ValueError:  # No sku found
+                    return ""
+        return ""

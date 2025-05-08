@@ -287,12 +287,13 @@ def product_search(user_tid: str):
     ):
         if (search_query_name or search_query_seller
                 or price_range != (0.0, 1000.0)):
-            # Когда бэк доделаете подклбчите
-            # make_api_request("/search", "POST", {
-            #     "query": search_query,
-            #     "min_price": price_range[0],
-            #     "max_price": price_range[1]
-            # })
+            
+            results, error = make_api_request("/search", "POST", {
+                "query": search_query_name,
+                "min_price": price_range[0],
+                "max_price": price_range[1],
+                "seller": search_query_seller
+            })
 
             # Показывает пока просто всякое
             st.info(
@@ -300,29 +301,8 @@ def product_search(user_tid: str):
                 f"seller like '{search_query_seller}' and price between " +
                 f"₽{price_range[0]:.2f}-₽{price_range[1]:.2f}")
 
-            demo_results = [
-                {"name": "Premium Headphones",
-                 "price": "199.99",
-                 "seller": "AudioTech"},
-                {"name": "Wireless Earbuds",
-                 "price": "89.99",
-                 "seller": "SoundMaster"},
-                {"name": "Bluetooth Speaker",
-                 "price": "129.99",
-                 "seller": "AudioTech"}
-            ]
-
             # Display results with themed cards
-            for product in demo_results:
-                if not (price_range[0] <= float(product['price'])
-                        <= price_range[1]):
-                    continue
-                if search_query_name and (search_query_name.lower()
-                                          not in product['name'].lower()):
-                    continue
-                if (search_query_seller and search_query_seller.lower()
-                        not in product['seller'].lower()):
-                    continue
+            for product in results:
                 with st.container(border=True):
                     cols = st.columns([3, 1, 1])
                     with cols[0]:
@@ -337,9 +317,20 @@ def product_search(user_tid: str):
                                 help=f"Track price for {product['name']}"
                         ):
                             # In real app: call add_tracking API
-                            st.success(f"Added {product['name']}"
-                                       + " to tracked products!")
-                            st.rerun()
+                            update_data = {
+                                "user_tid": st.session_state.user_tid,
+                                "product_id": product["id"],
+                                "new_price": new_threshold
+                            }
+                            _, error = make_api_request("/tracking",
+                                                        "PUT", update_data)
+                            
+                            if error:
+                                st.error(f"Error: {error}")
+                            else:
+                                st.success(f"Added {product['name']}"
+                                           + " to tracked products!")
+                                st.rerun()
         else:
             st.warning("Please enter search criteria or adjust price range")
 

@@ -16,16 +16,20 @@ jobs:
           python-version: '3.13'
           cache: 'pip'
 
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v4
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pytest pytest-cov coverage
+          poetry install
 
       - name: pytesting
         run: |
-          pytest -s --cov=app/ test/
-          pytest -s --cov=app/ --cov-branch test/
-          coverage report --fail-under=60
+          poetry run pytest -s --cov=app/ test/
+          poetry run pytest -s --cov=app/ --cov-branch test/
+          poetry run coverage report --fail-under=60
 
   reliability:
     runs-on: ubuntu-latest
@@ -40,12 +44,15 @@ jobs:
           python-version: '3.13'
           cache: 'pip'
 
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v4
+
       - name: flake8 Lint
         uses: py-actions/flake8@v2
 
       - name: Ruff Lint
-      - uses: astral-sh/ruff-action@v3
-  
+        uses: astral-sh/ruff-action@v3
+
   security:
     runs-on: ubuntu-latest
     name: Security checks via bandit, snyk
@@ -58,6 +65,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: 'pip'
+
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v4
 
       - name: Run Bandit
         run: bash <(curl -s https://raw.githubusercontent.com/CICDToolbox/bandit/master/pipeline.sh)
@@ -75,8 +85,6 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [pytest, lint, security]
+    needs: [maintainability, reliability, security]
     steps:
       - run: echo "This is where Deployment should happen"
-
-
