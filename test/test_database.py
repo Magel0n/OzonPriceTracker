@@ -8,7 +8,7 @@ class TestDatabase(TestCase):
     @classmethod
     def setUpClass(cls):
         # Using in-memory database avoids changes of primary database
-        os.environ['db_url'] = "\\tmp\\test.db"
+        os.environ['db_url'] = "test.db"
         cls.db = Database()
 
     @classmethod
