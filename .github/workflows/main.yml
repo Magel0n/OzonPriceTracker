@@ -80,6 +80,13 @@ jobs:
       - name: Run Bandit
         run: poetry run bandit -r app/ -x test/
 
+      - name: Install Snyk
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+        if: always()
+
       - name: Run Snyk for only severe vulnerabilities
         uses: snyk/actions/python@master
         env:
