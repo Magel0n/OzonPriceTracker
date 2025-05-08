@@ -3,6 +3,9 @@
 secrets.env
 ./secrets.env
 
+# Quality Requirement stuff
+.coverage
+
 # For selenium
 app/downloaded_files/*
 downloaded_files/*
