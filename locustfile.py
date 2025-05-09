@@ -25,4 +25,4 @@ class AppUser(HttpUser):
 
     @task
     def ping_page(self):
-        self.client.get("/")
+        self.client.get("/alive")

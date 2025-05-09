@@ -127,6 +127,11 @@ async def validate_token_token(token: Annotated[str, Depends(HTTPBearer())]):
         raise credentials_exception
 
 
+@app.get("/alive")
+async def alive() -> StatusResponse:
+    return StatusResponse(success=True, message="I am in fact, alive")
+
+
 @app.get("/verify-token")
 async def verify_token(
     user_tid: Annotated[int, Depends(validate_token)]

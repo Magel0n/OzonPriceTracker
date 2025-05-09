@@ -117,10 +117,10 @@ jobs:
         name: Run app
         with:
           run: |
-            poetry run streamlit run app/app.py
+            poetry run python app/api.py
             
           wait-on: |
-            http-get://localhost:8051
+            http://localhost:12345/alive
 
           wait-for: 30s
 
@@ -128,7 +128,7 @@ jobs:
         uses: apardo04/locust-github-action@master
         with:
           LOCUSTFILE: "locustfile.py"
-          URL:  "localhost:8051"
+          URL:  "localhost:12345"
           USERS: "50"
           RATE: "10"
           RUNTIME: "15s"
