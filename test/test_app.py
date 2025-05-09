@@ -98,7 +98,7 @@ def mock_user_data_several_products():  # pragma: no mutate
 
 @pytest.fixture  # pragma: no mutate
 def mock_several_products():  # pragma: no mutate
-    with patch("app.requests.post") as mock_get:
+    with patch("app.requests.post") as mock_post:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -110,27 +110,11 @@ def mock_several_products():  # pragma: no mutate
                     "seller": "Test Seller",
                     "url": "http://test.com",
                     "tracking_price": "90.00"
-                },
-                {
-                    "id": "2",
-                    "name": "Product 2",
-                    "price": "200.00",
-                    "seller": "Test Seller",
-                    "url": "http://test.com",
-                    "tracking_price": "90.00"
-                },
-                {
-                    "id": "3",
-                    "name": "Product 3",
-                    "price": "300.00",
-                    "seller": "Test Seller",
-                    "url": "http://test.com",
-                    "tracking_price": "270.00"
                 }
             ]
         }
-        mock_get.return_value = mock_response
-        yield
+        mock_post.return_value = mock_response
+        yield mock_response
 
 @pytest.fixture  # pragma: no mutate
 def mock_empty_products():  # pragma: no mutate
@@ -300,14 +284,15 @@ def test_product_search(mock_auth_success, mock_several_products):  # pragma: no
     at.text_input[0].set_value("Headphones")
     at.text_input[1].set_value("AudioTech")
     at.slider[0].set_value((0, 200))
+    
+    at.button[0].click()
+    at.run()
 
-    with patch("app.requests.post") as mock_post:
-        mock_post.return_value = mock_several_products
-
-        at.button[0].click()
-        at.run()
-
-        assert 2 == 2
+    assert at.markdown[1].value == "Product 1"
+    assert at.markdown[2].value == "₽100.00"
+    assert at.caption[0].value == "Seller: Test Seller"
+    assert at.button[0].label == "🔎 Search Products"
+    assert at.button[1].label == "Track"
 
 
 def test_product_tracking_actions(mock_auth_success, mock_user_data):  # pragma: no mutate

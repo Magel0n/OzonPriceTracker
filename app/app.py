@@ -310,7 +310,7 @@ def product_search(user_tid: str):
                 "max_price": price_range[1],
                 "seller": search_query_seller
             })
-            
+
             if results == None:
                 st.error(f"Could not find products: {str(error)}")
                 return
