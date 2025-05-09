@@ -233,7 +233,9 @@ def add_product_form(user_tid: str):
 
     product_identifier = st.text_input(input_label)  # Updated label
 
-    price_threshold = st.text_input("Notify me when price drops below (set at 90% of the price by default)")
+    price_threshold = st.text_input(
+        "Notify me when price drops below \
+(set at 90% of the price by default)")
 
     with st.form(key="add_product_form"):
         submitted = st.form_submit_button("Start Tracking")
@@ -311,7 +313,7 @@ def product_search(user_tid: str):
                 "seller": search_query_seller
             })
 
-            if results == None:
+            if results is None:
                 st.error(f"Could not find products: {str(error)}")
                 return
 

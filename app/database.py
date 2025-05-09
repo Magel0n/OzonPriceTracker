@@ -195,7 +195,7 @@ class Database:
             -> dict[int, list[TrackedProductModel]] | None:
         cursor = self.conn.cursor()
         ret = dict()
-        
+
         cursor.execute("""
         SELECT p.product_id, p.url, p.sku, p.name,
         p.price, p.seller, t.tracking_price, t.telegram_id
@@ -203,7 +203,7 @@ class Database:
         JOIN tracking t ON p.product_id = t.product_id
         WHERE p.product_id IN (?);
         """, (','.join(str(i) for i in product_ids),))
-        
+
         print(product_ids, flush=True)
         print(','.join(str(i) for i in product_ids), flush=True)
         print(f"""
@@ -220,13 +220,15 @@ class Database:
             print(entry, flush=True)
             if entry[-1] not in ret:
                 ret[entry[-1]] = list()
-            ret[entry[-1]].append(TrackedProductModel(id=entry[0],
-                   url=entry[1],
-                   sku=entry[2],
-                   name=entry[3],
-                   price=entry[4],
-                   seller=entry[5],
-                   tracking_price=entry[6]))
+            ret[entry[-1]].append(
+                TrackedProductModel(
+                    id=entry[0],
+                    url=entry[1],
+                    sku=entry[2],
+                    name=entry[3],
+                    price=entry[4],
+                    seller=entry[5],
+                    tracking_price=entry[6]))
 
         cursor.close()
         return ret

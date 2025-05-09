@@ -92,7 +92,7 @@ class OzonScraper:
         usersToSend = self.database.get_users_by_products(
             list(map(lambda x: x.id, products_to_send))
         )
-        
+
         asyncio.run(self.tgwrapper.push_notifications(usersToSend))
         return self.update_offers_job
 
