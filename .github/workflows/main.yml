@@ -122,7 +122,7 @@ jobs:
             poetry run python app/api.py
             
           wait-on: |
-            http://localhost:12345/alive
+            http-get://localhost:12345/alive
 
           wait-for: 30s
 
