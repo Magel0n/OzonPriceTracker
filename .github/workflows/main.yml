@@ -94,12 +94,40 @@ jobs:
         with:
           args: --severity-threshold=high --all-projects --exclude=test
 
-  # performance:
-  #   runs-on: ubuntu-latest
-  #   name: locust usage
+  performance:
+    runs-on: ubuntu-latest
+    name: Performance checks via locust
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+     - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: 'pip'
+
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v4
+
+      - name: Poetry preparation
+        run: poetry install
+
+      - name: Run app
+        run: |
+            poetry run streamlit run app/app.py &
+
+      - name: Run Load Test
+        uses: apardo04/locust-github-action@master
+        with:
+          LOCUSTFILE: "locustfile.py"
+          URL:  "localhost:8051"
+          USERS: "50"
+          RATE: "10"
+          RUNTIME: "15s"
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [maintainability, reliability, security]
+    needs: [maintainability, reliability, security, performance]
     steps:
       - run: echo "This is where Deployment should happen"
