@@ -115,6 +115,8 @@ jobs:
 
       - uses: JarvusInnovations/background-action@v1
         name: Run app
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         with:
           run: |
             poetry run python app/api.py
