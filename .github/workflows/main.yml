@@ -3,7 +3,7 @@ name: Quality Requirements Satisfaction
 on: [push]
 
 jobs:
-  maintainability:
+  pytest:
     runs-on: ubuntu-latest
     name: Running pytest, coverage reports
     steps:
@@ -20,10 +20,7 @@ jobs:
         uses: abatilo/actions-poetry@v4
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest pytest-cov coverage
-          poetry install
+        run: poetry install
 
       - name: pytesting
         run: |
@@ -31,7 +28,35 @@ jobs:
           poetry run pytest -s --cov=app/ --cov-branch test/
           poetry run coverage report --fail-under=60
 
-  reliability:
+  mutation:
+    runs-on: ubuntu-latest
+    name: mutmut testing
+    needs: pytest  
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v4
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Run mutation tests
+        run: |
+          poetry run mutmut run --paths-to-mutate app/database.py --runner "pytest test/test_database.py -x"
+          
+      - name: Show mutation results
+        run: |
+          poetry run mutmut results
+
+  lint:
     runs-on: ubuntu-latest
     name: Linting with flake8 and ruff
     steps:
@@ -57,6 +82,7 @@ jobs:
         with:
           version: "0.11.8"
           config: "ruff.toml"
+
 
   security:
     runs-on: ubuntu-latest
@@ -106,9 +132,6 @@ jobs:
         with:
           python-version: "3.13"
           cache: 'pip'
-          
-      - name: Install locust
-        run: pip install locust
 
       - name: Install poetry
         uses: abatilo/actions-poetry@v4
@@ -135,6 +158,6 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [maintainability, reliability, security, performance]
+    needs: [pytest, lint, security, performance]
     steps:
       - run: echo "This is where Deployment should happen"
