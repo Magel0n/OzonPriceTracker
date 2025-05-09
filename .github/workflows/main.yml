@@ -113,9 +113,16 @@ jobs:
       - name: Poetry preparation
         run: poetry install
 
-      - name: Run app
-        run: |
-            poetry run streamlit run app/app.py &
+      - uses: JarvusInnovations/background-action@v1
+        name: Run app
+        with:
+          run: |
+            poetry run streamlit run app\app.py
+            
+          wait-on: |
+            http://localhost:8051
+
+          wait-for: 30s
 
       - name: Run Load Test
         uses: apardo04/locust-github-action@master
