@@ -52,11 +52,9 @@ jobs:
         run: |
           poetry run mutmut run --paths-to-mutate app/database.py --runner "pytest test/test_database.py -x"
           
-          # Calculate and enforce 70% threshold
           RESULTS=$(poetry run mutmut results)
-          echo "$RESULTS"
+          echo "results: $RESULTS"
           
-          # Extract killed/survived numbers
           KILLED=$(echo "$RESULTS" | grep -oP 'Killed \K\d+')
           SURVIVED=$(echo "$RESULTS" | grep -oP 'Survived \K\d+')
           TOTAL=$((KILLED + SURVIVED))
@@ -64,10 +62,9 @@ jobs:
           # Calculate percentage
           PERCENTAGE=$(( KILLED * 100 / TOTAL ))
           echo "Mutation score: $PERCENTAGE% ($KILLED/$TOTAL)"
-          
-          # Fail if below 70%
+
           if [ "$PERCENTAGE" -lt 70 ]; then
-            echo "::error::Mutation score too low: $PERCENTAGE% (required: 70%)"
+            echo "ERROR: Mutation score too low: $PERCENTAGE% (required: 70%)"
             exit 1
           fi
 
