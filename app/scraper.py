@@ -12,24 +12,26 @@ from tgwrapper import TelegramWrapper
 class OzonScraper:
     database: Database
 
-    def __init__(self, tgwrapper: TelegramWrapper):  # pragma: no mutate
+    def __init__(self, tgwrapper: TelegramWrapper,
+                 retries: int = 3):  # pragma: no mutate
         self.headlessness: bool = bool(os.environ.get(  # pragma: no mutate
             "scraper_headlessness", False))  # pragma: no mutate
         self.update_time: int = int(os.environ.get(  # pragma: no mutate
             "scraper_update_time", 60 * 60 * 24))  # pragma: no mutate
         self.keepFailure: bool = bool(os.environ.get(  # pragma: no mutate
             "scraper_keepFailure", False))  # pragma: no mutate
+        self.retries_count = retries  # pragma: no mutate
         self.tgwrapper = tgwrapper  # pragma: no mutate
         threading.Thread(target=self.update_loop,  # pragma: no mutate
                          daemon=True).start()  # pragma: no mutate
 
     def update_loop(self):
         self.database = Database()
-        job = self.update_offers_job
+        job = self.update_offers_job  # pragma: no mutate
         # print("Started the update loop")
         while True:
             time.sleep(self.update_time)
-            job = job()
+            job = job()  # pragma: no mutate
 
     def update_offers_job(self):
         products = self.database.get_products()
@@ -37,7 +39,7 @@ class OzonScraper:
         # print("Started the update_offers_job")
         for product in products:
             if product.url is None:
-                urls.append(product.sku)
+                urls.append("https://www.ozon.ru/product/" + product.sku)
             else:
                 urls.append(product.url)
 
@@ -113,7 +115,7 @@ class OzonScraper:
         if (seller_lasting is None
                 or price_lasting is None
                 or name_lasting is None):
-            for i in range(3):
+            for i in range(self.retries_count):
                 name, price, seller = self._get_info_for_product(correct_url)
                 if seller_lasting is None:
                     seller_lasting = seller
@@ -161,10 +163,10 @@ class OzonScraper:
                 prices.append(None)
             return prices
 
-    def _selenium_get_name_for_product(self, sb: seleniumbase.SB)\
+    def _selenium_get_name_for_product(self, sb: seleniumbase.SB) \
             -> str | None:
         known_names = [".m2q_28", ".m1q_28", ".m3q_28"]
-        for i in range(3):
+        for i in range(self.retries_count):
             for elem in known_names:
                 result = sb.find_elements(elem)
                 if result:
@@ -174,7 +176,7 @@ class OzonScraper:
                 sb.save_page_source("failureName")
         return None
 
-    def _selenium_get_seller_for_product(self, sb: seleniumbase.SB)\
+    def _selenium_get_seller_for_product(self, sb: seleniumbase.SB) \
             -> str | None:
         known_names = [".tsCompactControl500Medium > span:nth-child(1)",
                        "div.tsCompactControl500Medium > span:nth-child(1)",
@@ -182,7 +184,7 @@ class OzonScraper:
                        ".y6k_28 > div:nth-child(2) > "
                        "div:nth-child(2) > div:nth-child(1)"
                        " > div:nth-child(1) > a:nth-child(1)"]
-        for i in range(3):
+        for i in range(self.retries_count):
             for elem in known_names:
                 result = sb.find_elements(elem)
                 if result:
@@ -192,10 +194,10 @@ class OzonScraper:
                 sb.save_page_source("failureSeller")
         return None
 
-    def _selenium_get_price_for_product(self, sb: seleniumbase.SB)\
+    def _selenium_get_price_for_product(self, sb: seleniumbase.SB) \
             -> int | None:
         known_names = [".m6p_28", ".m5p_28", "div.m5p_28"]
-        for i in range(3):
+        for i in range(self.retries_count):
             for elem in known_names:
                 result = sb.find_elements(elem)
                 if result:
