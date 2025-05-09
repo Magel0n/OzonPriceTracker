@@ -120,7 +120,7 @@ jobs:
             poetry run streamlit run app/app.py
             
           wait-on: |
-            http://localhost:8051
+            http-get://localhost:8051
 
           wait-for: 30s
 
