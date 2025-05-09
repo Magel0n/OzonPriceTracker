@@ -21,7 +21,9 @@ PROFILE_PICS_DIR = Path(  # pragma: no mutate
 TOKEN_ENCRYPTION_ALGORITHM = os.environ.get(  # pragma: no mutate
     "TOKEN_ENCRYPTION_ALGORITHM", "HS256"
 )
-TOKEN_EXPIRATION_MINUTES = None
+TOKEN_EXPIRATION_MINUTES = os.environ.get(  # pragma: no mutate
+    "TOKEN_EXPIRATION_MINUTES", 10
+)
 APP_BASE_URL = os.environ.get(  # pragma: no mutate
     "APP_BASE_URL", "http://localhost:8501"
 )
