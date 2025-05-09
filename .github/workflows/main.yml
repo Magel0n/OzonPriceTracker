@@ -54,7 +54,7 @@ jobs:
         continue-on-error: true
 
       - name: Survival rate estimation
-        run:
+        run: |
           poetry run mutmut results > mutmut_results.txt
           cat mutmut_results.txt
           
