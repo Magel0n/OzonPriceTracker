@@ -196,28 +196,18 @@ class Database:
         cursor = self.conn.cursor()
         ret = dict()
 
-        cursor.execute("""
+        placeholders = ','.join(['?'] * len(product_ids))
+        cursor.execute(f"""
         SELECT p.product_id, p.url, p.sku, p.name,
         p.price, p.seller, t.tracking_price, t.telegram_id
         FROM products p
         JOIN tracking t ON p.product_id = t.product_id
-        WHERE p.product_id IN (?);
-        """, (','.join(str(i) for i in product_ids),))
+        WHERE p.product_id IN ({placeholders});
+        """, product_ids)
 
-        print(product_ids, flush=True)
-        print(','.join(str(i) for i in product_ids), flush=True)
-        print(f"""
-        SELECT p.product_id, p.url, p.sku, p.name,
-        p.price, p.seller, t.tracking_price, t.telegram_id
-        FROM products p
-        JOIN tracking t ON p.product_id = t.product_id
-        WHERE p.product_id IN ({','.join(str(i) for i in product_ids)});
-        """, flush=True)
         for entry in cursor.fetchall():
-            print(entry, flush=True)
             if float(entry[6]) < float(entry[4]):
                 continue
-            print(entry, flush=True)
             if entry[-1] not in ret:
                 ret[entry[-1]] = list()
             ret[entry[-1]].append(
