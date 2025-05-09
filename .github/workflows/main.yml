@@ -117,7 +117,7 @@ jobs:
         name: Run app
         with:
           run: |
-            poetry run streamlit run app\app.py
+            poetry run streamlit run app/app.py
             
           wait-on: |
             http://localhost:8051
