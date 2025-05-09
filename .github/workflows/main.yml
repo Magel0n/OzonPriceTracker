@@ -106,6 +106,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: 'pip'
+          
+      - name: Install locust
+        run: pip install locust
 
       - name: Install poetry
         uses: abatilo/actions-poetry@v4
@@ -127,13 +130,8 @@ jobs:
           wait-for: 30s
 
       - name: Run Load Test
-        uses: apardo04/locust-github-action@master
-        with:
-          LOCUSTFILE: "locustfile.py"
-          URL:  "http://localhost:12345"
-          USERS: "50"
-          RATE: "10"
-          RUNTIME: "15s"
+        run: |
+          locust --headless -u 50 --run-time 30s --stop-timeout 5s --host http://localhost:12345
 
   deploy:
     runs-on: ubuntu-latest
