@@ -8,6 +8,7 @@ secrets.env
 htmlcov/**
 **.bak
 .mutmut-cache
+html/**
 
 # For selenium
 app/downloaded_files/*
