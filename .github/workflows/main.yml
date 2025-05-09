@@ -55,7 +55,8 @@ jobs:
       - name: Ruff Lint
         uses: astral-sh/ruff-action@v3
         with:
-          args: "--exclude=test/*"
+          version: "0.11.8"
+          config: "ruff.toml"
 
   security:
     runs-on: ubuntu-latest
@@ -73,15 +74,25 @@ jobs:
       - name: Install poetry
         uses: abatilo/actions-poetry@v4
 
+      - name: Poetry preparation
+        run: poetry install
+
       - name: Run Bandit
-        run: bash <(curl -s https://raw.githubusercontent.com/CICDToolbox/bandit/master/pipeline.sh)
+        run: poetry run bandit -r app/ -x test/
+
+      - name: Install Snyk
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+        if: always()
 
       - name: Run Snyk for only severe vulnerabilities
         uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high
+          args: --severity-threshold=high --all-projects --exclude=test
 
   # performance:
   #   runs-on: ubuntu-latest
