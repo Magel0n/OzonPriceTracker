@@ -197,13 +197,14 @@ class Database:
         ret = dict()
 
         placeholders = ','.join(['?'] * len(product_ids))
-        cursor.execute(f"""
+        query = f"""
         SELECT p.product_id, p.url, p.sku, p.name,
         p.price, p.seller, t.tracking_price, t.telegram_id
         FROM products p
         JOIN tracking t ON p.product_id = t.product_id
         WHERE p.product_id IN ({placeholders});
-        """, product_ids)
+        """
+        cursor.execute(query, product_ids)
 
         for entry in cursor.fetchall():
             if float(entry[6]) < float(entry[4]):
