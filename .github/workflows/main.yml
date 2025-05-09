@@ -56,17 +56,17 @@ jobs:
       - name: Survival rate estimation
         run:
           RESULTS=$(poetry run mutmut results)
-          echo "results: $RESULTS"
+          echo "results... $RESULTS"
           
           KILLED=$(echo "$RESULTS" | grep -oP 'Killed \K\d+')
           SURVIVED=$(echo "$RESULTS" | grep -oP 'Survived \K\d+')
           TOTAL=$((KILLED + SURVIVED))
           
           PERCENTAGE=$(( KILLED * 100 / TOTAL ))
-          echo "Mutation score: $PERCENTAGE% ($KILLED/$TOTAL)"
+          echo "Mutation score... $PERCENTAGE% ($KILLED/$TOTAL)"
 
           if [ "$PERCENTAGE" -lt 70 ]; then
-            echo "ERROR: Mutation score too low: $PERCENTAGE% (required: 70%)"
+            echo "ERROR Mutation score too low $PERCENTAGE% (required 70%)"
             exit 1
           fi
 
