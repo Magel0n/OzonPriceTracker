@@ -195,18 +195,23 @@ class Database:
             -> dict[int, list[TrackedProductModel]] | None:
         cursor = self.conn.cursor()
         ret = dict()
+        results = list()
 
-        placeholders = ','.join(['?'] * len(product_ids))
-        query = f"""
-        SELECT p.product_id, p.url, p.sku, p.name,
-        p.price, p.seller, t.tracking_price, t.telegram_id
-        FROM products p
-        JOIN tracking t ON p.product_id = t.product_id
-        WHERE p.product_id IN ({placeholders});
-        """
-        cursor.execute(query, product_ids)
+        def lmb(product_id: str):
+            cursor.execute("""
+            SELECT p.product_id, p.url, p.sku, p.name,
+            p.price, p.seller, t.tracking_price, t.telegram_id
+            FROM products p
+            JOIN tracking t ON p.product_id = t.product_id
+            WHERE p.product_id = ?;
+            """, (product_id,))
+            for elem in cursor.fetchall():
+                results.append(elem)
 
-        for entry in cursor.fetchall():
+        for product_id in product_ids:
+            lmb(product_id)
+
+        for entry in results:
             if float(entry[6]) < float(entry[4]):
                 continue
             if entry[-1] not in ret:
