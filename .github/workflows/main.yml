@@ -51,10 +51,7 @@ jobs:
       - name: Run mutation tests
         run: |
           poetry run mutmut run --paths-to-mutate app/database.py --runner "pytest test/test_database.py -x"
-          
-      - name: Show mutation results
-        run: |
-          poetry run mutmut results
+          poetry run mutmut results --fail-under 70
 
   lint:
     runs-on: ubuntu-latest
@@ -137,7 +134,10 @@ jobs:
         uses: abatilo/actions-poetry@v4
 
       - name: Poetry preparation
-        run: poetry install
+        run: |
+          python -m pip install --upgrade pip
+          pip install locust
+          poetry install
 
       - uses: JarvusInnovations/background-action@v1
         name: Run app
@@ -158,6 +158,6 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [pytest, lint, security, performance]
+    needs: [pytest, mutation, lint, security, performance]
     steps:
       - run: echo "This is where Deployment should happen"
