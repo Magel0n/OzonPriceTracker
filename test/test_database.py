@@ -75,7 +75,7 @@ class TestDatabase(TestCase):
         product = self._create_test_product()
         products = self.db.get_products()
         self.assertTrue(len(products) == 1)
-        self.assertTrue(products[0].__eq__(product.sku))
+        self.assertTrue(products[0].__eq__(product))
 
     def test_add_product_existing(self):
         product1 = self._create_test_product("skuff")

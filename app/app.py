@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 from typing import Optional
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:12345")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:12345")
 STATIC_FILES_URL = os.getenv("STATIC_FILES_URL",
-                             "http://localhost:12345/static")
+                             "http://127.0.0.1:12345/static")
 
 TG_BOT_LINK = "https://t.me/priceTrackerOzonBot"
 
@@ -252,11 +252,17 @@ def add_product_form(user_tid: str):
                 else None
             }
 
+            placeholder = st.empty()
+            placeholder.info(
+                "Please hold while we get information about your product..."
+            )
+
             response, error = make_api_request("/tracking",
                                                "POST",
                                                tracking_data)
+
             if error:
-                st.error(f"Error: {error}")
+                placeholder.error(f"Error: {error}")
             elif price_threshold:
                 # Set threshold after adding
                 update_data = {
@@ -266,10 +272,13 @@ def add_product_form(user_tid: str):
                 }
                 _, error = make_api_request("/tracking", "PUT", update_data)
                 if error:
-                    st.error(f"Added but couldn't set threshold: {error}")
+                    placeholder.error(
+                        f"Added but couldn't set threshold: {error}"
+                    )
                 else:
-                    st.success("Product added successfully!")
-                    st.rerun()
+                    placeholder.success("Product added successfully!")
+            else:
+                placeholder.success("Product added successfully!")
 
 
 def product_search(user_tid: str):
