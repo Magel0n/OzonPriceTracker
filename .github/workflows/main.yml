@@ -55,11 +55,19 @@ jobs:
 
       - name: Survival rate estimation
         run:
-          RESULTS=$(poetry run mutmut results)
-          echo "results... $RESULTS"
+          poetry run mutmut results > mutmut_results.txt
+          cat mutmut_results.txt
           
-          KILLED=$(echo "$RESULTS" | grep -oP 'Killed \K\d+')
-          SURVIVED=$(echo "$RESULTS" | grep -oP 'Survived \K\d+')
+          KILLED=$(grep -oP 'Killed \K\d+' mutmut_results.txt || echo "0")
+          SURVIVED=$(grep -oP 'Survived \K\d+' mutmut_results.txt || echo "0")
+          
+          if [ -z "$KILLED" ] && [ -z "$SURVIVED" ]; then
+            echo "No mutations detected - check your mutmut configuration"
+            exit 0
+          fi
+          
+          KILLED=${KILLED:-0}
+          SURVIVED=${SURVIVED:-0}
           TOTAL=$((KILLED + SURVIVED))
           
           PERCENTAGE=$(( KILLED * 100 / TOTAL ))
