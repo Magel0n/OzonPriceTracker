@@ -4,6 +4,8 @@ import threading
 
 import seleniumbase
 
+import asyncio
+
 from api_models import TrackedProductModel
 from database import Database
 from tgwrapper import TelegramWrapper
@@ -29,7 +31,7 @@ class OzonScraper:
         self.headlessness: bool = bool(os.environ.get(  # pragma: no mutate
             "scraper_headlessness", False))  # pragma: no mutate
         self.update_time: int = int(os.environ.get(  # pragma: no mutate
-            "scraper_update_time", 60 * 60 * 24))  # pragma: no mutate
+            "scraper_update_time", 60))  # pragma: no mutate
         self.keepFailure: bool = bool(os.environ.get(  # pragma: no mutate
             "scraper_keepFailure", False))  # pragma: no mutate
         self.retries_count = retries  # pragma: no mutate
@@ -86,26 +88,12 @@ class OzonScraper:
         products_ids = [product.id for product in products]
         self.database.add_to_price_history(products_ids, int(time.time()))
         # print("Ended database update\nGetting users to send notifications")
-        usersToSend = self.database.get_users_by_products(products_to_send)
-
-        users_to_products: dict[str, list[TrackedProductModel]] = {}
-        products_to_send_id = list(map(lambda product: product.id,
-                                       products_to_send))
-        # print(usersToSend, products_ids, products_to_send,
-        # products_to_send_id, sep="\n")
-
-        for userId, items in usersToSend.items():
-            for item in (
-                    filter(lambda x: x.id in products_to_send_id, items)):
-                # print(users_to_products, item, userId)
-                if str(userId) not in users_to_products.keys():
-                    # print("creating a new item")
-                    users_to_products[str(userId)] = [item]
-                else:
-                    # print("Appending to existing item")
-                    users_to_products[str(userId)].append(item)
-        # print(users_to_products)
-        self.tgwrapper.push_notifications(users_to_products)
+        print(f"Product ids: {products_to_send}")
+        usersToSend = self.database.get_users_by_products(
+            list(map(lambda x: x.id, products_to_send))
+        )
+        
+        asyncio.run(self.tgwrapper.push_notifications(usersToSend))
         return self.update_offers_job
 
     # Should return product info by sku or url

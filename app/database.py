@@ -191,21 +191,43 @@ class Database:
         return ret
 
     # Should return dictionary of users that track the products listed
-    def get_users_by_products(self, product_ids: list[TrackedProductModel]) \
+    def get_users_by_products(self, product_ids: list[int]) \
             -> dict[int, list[TrackedProductModel]] | None:
         cursor = self.conn.cursor()
         ret = dict()
+        
+        cursor.execute("""
+        SELECT p.product_id, p.url, p.sku, p.name,
+        p.price, p.seller, t.tracking_price, t.telegram_id
+        FROM products p
+        JOIN tracking t ON p.product_id = t.product_id
+        WHERE p.product_id IN (?);
+        """, (','.join(str(i) for i in product_ids),))
+        
+        print(product_ids, flush=True)
+        print(','.join(str(i) for i in product_ids), flush=True)
+        print(f"""
+        SELECT p.product_id, p.url, p.sku, p.name,
+        p.price, p.seller, t.tracking_price, t.telegram_id
+        FROM products p
+        JOIN tracking t ON p.product_id = t.product_id
+        WHERE p.product_id IN ({','.join(str(i) for i in product_ids)});
+        """, flush=True)
+        for entry in cursor.fetchall():
+            print(entry, flush=True)
+            if float(entry[6]) < float(entry[4]):
+                continue
+            print(entry, flush=True)
+            if entry[-1] not in ret:
+                ret[entry[-1]] = list()
+            ret[entry[-1]].append(TrackedProductModel(id=entry[0],
+                   url=entry[1],
+                   sku=entry[2],
+                   name=entry[3],
+                   price=entry[4],
+                   seller=entry[5],
+                   tracking_price=entry[6]))
 
-        def lmb(p: TrackedProductModel):
-            cursor.execute("""
-            SELECT telegram_id FROM tracking
-            WHERE product_id = ?;
-            """, (p.id,))
-            for user in cursor.fetchall():
-                if user[0] not in ret:
-                    ret[user[0]] = list()
-                ret[user[0]].append(p)
-        [lmb(prod) for prod in product_ids]
         cursor.close()
         return ret
 

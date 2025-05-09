@@ -364,7 +364,8 @@ class TestScrapper(unittest.TestCase):
         prices = scraper._get_price_for_products(urls)
         self.assertEqual([1999, 2499, 3499], prices)
 
-    def test_update_offers_job_failure_to_parse(self):
+    @patch("asyncio.run")
+    def test_update_offers_job_failure_to_parse(self, async_run):
         mock_db = MagicMock(spec=Database)
         product = MagicMock(spec=TrackedProductModel, price="1000", id=1,
                             url="https://www.ozon.ru/product/123", sku="123")
@@ -379,7 +380,8 @@ class TestScrapper(unittest.TestCase):
                     scraper.database.get_users_by_products.assert_called_once_with([])
                     scraper.tgwrapper.push_notifications.assert_called_once_with({})
 
-    def test_update_offers_job_failure_to_parse_no_url(self):
+    @patch("asyncio.run")
+    def test_update_offers_job_failure_to_parse_no_url(self, async_run):
         mock_db = MagicMock(spec=Database)
         product = MagicMock(spec=TrackedProductModel, price="1000", id=1, url=None, sku="123")
         mock_db.get_products.return_value = [product]
@@ -393,7 +395,8 @@ class TestScrapper(unittest.TestCase):
                     scraper.database.get_users_by_products.assert_called_once_with([])
                     scraper.tgwrapper.push_notifications.assert_called_once_with({})
 
-    def test_update_offers_job_price_increase(self):
+    @patch("asyncio.run")
+    def test_update_offers_job_price_increase(self, async_run):
         mock_db = MagicMock(spec=Database)
         product = MagicMock(spec=TrackedProductModel, price="1000", id=1,
                             url="https://www.ozon.ru/product/123", sku="123")
@@ -412,7 +415,8 @@ class TestScrapper(unittest.TestCase):
                     )
                     scraper.tgwrapper.push_notifications.assert_called_once_with({})
 
-    def test_update_offers_job_price_decrease(self):
+    @patch("asyncio.run")
+    def test_update_offers_job_price_decrease(self, async_run):
         mock_db = MagicMock(spec=Database)
         product = MagicMock(spec=TrackedProductModel, price="1500", id=1,
                             url="https://www.ozon.ru/product/123", sku="123")
@@ -427,11 +431,11 @@ class TestScrapper(unittest.TestCase):
                     # time.sleep(min(scraper.update_time - 1, 15))
                     self.assertEqual(result, scraper.update_offers_job)
                     self.assertEqual(product.price, "1000")
-                    scraper.database.get_users_by_products.assert_called_once_with([product, product2])
+                    scraper.database.get_users_by_products.assert_called_once_with([1, 2])
                     scraper.database.add_to_price_history.assert_called_once_with(
                         [1, 2], unittest.mock.ANY  # Timestamp
                     )
-                    scraper.tgwrapper.push_notifications.assert_called_once_with({'1': [product, product2]})
+                    scraper.tgwrapper.push_notifications.assert_called_once_with({1: [product, product2]})
 
     # This code is commented out because it gives little informational value, but makes mutmut tests long
     # def test_example(self):

@@ -1,6 +1,6 @@
 name: Quality Requirements Satisfaction
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   maintainability:

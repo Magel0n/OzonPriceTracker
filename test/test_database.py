@@ -28,7 +28,7 @@ class TestDatabase(TestCase):
         self.db.login_user(user)
         return user
 
-    def _create_test_product(self, sku="sku_FF", price="500"):
+    def _create_test_product(self, sku="sku_FF", price="100"):
         product = TrackedProductModel(
             id=None,
             url="http://ozon.ru",
@@ -207,7 +207,7 @@ class TestDatabase(TestCase):
         history = self.db.get_price_history(product.id)
 
         self.assertTrue(len(history) == 2)
-        self.assertTrue(history[0][0] == "500")
+        self.assertTrue(history[0][0] == "100")
         self.assertTrue(history[1][0] == "250")
 
     def test_price_history_invalid_product(self):
@@ -223,7 +223,7 @@ class TestDatabase(TestCase):
         self.db.add_tracking(TrackingModel(
             user_tid=user1.tid,
             product_id=product1.id,
-            new_price="100"
+            new_price="150"
         ))
         self.db.add_tracking(TrackingModel(
             user_tid=user1.tid,
@@ -236,7 +236,7 @@ class TestDatabase(TestCase):
             new_price="150"
         ))
 
-        result = self.db.get_users_by_products([product1, product2])
+        result = self.db.get_users_by_products([product1.id, product2.id])
 
         self.assertTrue(len(result[user1.tid]) == 2)
         self.assertTrue(len(result[user2.tid]) == 1)

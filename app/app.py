@@ -26,7 +26,7 @@ def load_css():
 
 
 def make_api_request(endpoint: str, method: str = "GET",
-                     data: Optional[dict] = None):
+                     data: Optional[dict] = None, is_first_auth=False):
     if not st.session_state.auth_token:
         return None, "Not authenticated"
 
@@ -34,34 +34,38 @@ def make_api_request(endpoint: str, method: str = "GET",
     headers = {"Authorization": f"Bearer {st.session_state.auth_token}"}
     try:
         if method.upper() == "GET":
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=20)
         elif method.upper() == "POST":
             response = requests.post(url,
                                      json=data,
                                      headers=headers,
-                                     timeout=10)
+                                     timeout=20)
         elif method.upper() == "PUT":
             response = requests.put(url,
                                     json=data,
                                     headers=headers,
-                                    timeout=10)
+                                    timeout=20)
         elif method.upper() == "DELETE":
             response = requests.delete(url,
                                        json=data,
                                        headers=headers,
-                                       timeout=10)
+                                       timeout=20)
         else:
             return None, "Invalid HTTP method"
 
         if response.status_code == 200:
             return response.json(), None
         elif response.status_code == 401:  # Unauthorized
-            return (None,
-                    'Unauthorized - please login'
-                    + ' via Telegram bot {TG_BOT_LINK}')
+            if is_first_auth:
+                return (None,
+                        'Unauthorized - please login'
+                        + f' via Telegram bot {TG_BOT_LINK}')
+            else:
+                st.session_state.clear()
+                st.rerun()
         else:
             error_data = response.json()
-            return None, error_data.get("message", "Unknown error occurred")
+            return None, error_data.get("detail", "Unknown error occurred")
     except requests.exceptions.RequestException as e:
         return None, f"Connection error: {str(e)}"
     except requests.exceptions.Timeout as e:
@@ -73,7 +77,10 @@ def check_auth():
     if "token" in query_params and not st.session_state.auth_token:
         st.session_state.auth_token = query_params["token"]
         # Verify token with backend
-        data, error = make_api_request("/verify-token")
+        data, error = make_api_request(
+            "/verify-token",
+            is_first_auth=True
+        )
         if error:
             st.session_state.auth_token = None
             return False
@@ -140,7 +147,7 @@ def display_user_info():
                 with col1:
                     st.markdown(f"**Seller:** {product['seller']}")
                     st.markdown(f"**URL:** [{product['url']}]"
-                                + "({product['url']})")
+                                + f"({product['url']})")
                     st.markdown("**Alert Threshold:** "
                                 + f"₽{product['tracking_price']}")
 
@@ -187,7 +194,7 @@ def display_user_info():
                     st.warning(f"Couldn't load history: {error}")
                 elif history_data["history"]:
                     df = pd.DataFrame(history_data["history"],
-                                      columns=["timestamp", "price"])
+                                      columns=["price", "timestamp"])
                     df["price"] = df["price"].astype(float)
                     df["date"] = pd.to_datetime(df["timestamp"], unit="s")
 
@@ -226,17 +233,13 @@ def add_product_form(user_tid: str):
 
     product_identifier = st.text_input(input_label)  # Updated label
 
-    price_threshold = st.text_input("Notify me when price drops below")
+    price_threshold = st.text_input("Notify me when price drops below (set at 90% of the price by default)")
 
     with st.form(key="add_product_form"):
         submitted = st.form_submit_button("Start Tracking")
         if submitted:
             if not product_identifier:
                 st.error(f"Please provide a {input_label}")
-                return
-
-            if not price_threshold:
-                st.error("Please set a price threshold")
                 return
 
             tracking_data = {
@@ -252,7 +255,7 @@ def add_product_form(user_tid: str):
                                                tracking_data)
             if error:
                 st.error(f"Error: {error}")
-            else:
+            elif price_threshold:
                 # Set threshold after adding
                 update_data = {
                     "user_tid": user_tid,
@@ -286,8 +289,8 @@ def product_search(user_tid: str):
         price_range = st.slider(
             "Price range",
             min_value=0.0,
-            max_value=1000.0,
-            value=(0.0, 1000.0),
+            max_value=5000.0,
+            value=(0.0, 5000.0),
             step=1.0,
             format="₽%.2f"
         )
@@ -299,7 +302,7 @@ def product_search(user_tid: str):
             type="primary"  # Uses the primary color from our theme
     ):
         if (search_query_name or search_query_seller
-                or price_range != (0.0, 1000.0)):
+                or price_range != (0.0, 5000.0)):
 
             results, error = make_api_request("/search", "POST", {
                 "query": search_query_name,
@@ -307,15 +310,13 @@ def product_search(user_tid: str):
                 "max_price": price_range[1],
                 "seller": search_query_seller
             })
-
-            # Показывает пока просто всякое
-            st.info(
-                f"Searching for: name like '{search_query_name}', " +
-                f"seller like '{search_query_seller}' and price between " +
-                f"₽{price_range[0]:.2f}-₽{price_range[1]:.2f}")
+            
+            if results == None:
+                st.error(f"Could not find products: {str(error)}")
+                return
 
             # Display results with themed cards
-            for product in results:
+            for product in results["products"]:
                 with st.container(border=True):
                     cols = st.columns([3, 1, 1])
                     with cols[0]:

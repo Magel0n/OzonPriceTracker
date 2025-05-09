@@ -118,11 +118,11 @@ class TelegramWrapper:
             return None
 
     async def push_notifications(
-        self, users_to_products: dict[str, list[TrackedProductModel]]
+        self, users_to_products: dict[int, list[TrackedProductModel]]
     ) -> bool:
+        self.logger.info(f"Asked to send notifications: {users_to_products}")
         success = True
-        for user_tid, products in users_to_products.items():
-            user_id = int(user_tid)
+        for user_id, products in users_to_products.items():
             message = "Product updates:\n\n"
 
             for product in products:

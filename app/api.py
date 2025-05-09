@@ -129,6 +129,9 @@ async def validate_token_token(token: Annotated[str, Depends(HTTPBearer())]):
 
 @app.get("/alive")
 async def alive() -> StatusResponse:
+    """
+    Simply returns a successfull response, used as a liveness probe
+    """
     return StatusResponse(success=True, message="I am in fact, alive")
 
 
@@ -136,6 +139,10 @@ async def alive() -> StatusResponse:
 async def verify_token(
     user_tid: Annotated[int, Depends(validate_token)]
 ) -> VerifyTokenResponse:
+    """
+    Verifies the user's JWT token, returning their telegram id
+    for further operaion
+    """
     return VerifyTokenResponse(user_tid=user_tid)
 
 
@@ -143,6 +150,10 @@ async def verify_token(
 async def logout(
     token: Annotated[str, Depends(validate_token_token)]
 ) -> StatusResponse:
+    """
+    Adds the user's token to the blacklist, essentially
+    loggin them out
+    """
     blacklist.add(token)
     return StatusResponse(success=True, message="")
 
@@ -151,6 +162,11 @@ async def logout(
 async def get_user(
     user_tid: Annotated[int, Depends(validate_token)]
 ) -> UserResponse:
+    """
+    Gets information for the user's profile page:
+    their user info from telegram and the products
+    that they are tracking
+    """
     user = app.state.database.get_user(user_tid)
 
     if user is None:
@@ -168,32 +184,34 @@ async def add_tracking(
     tracking: CreateTrackingModel,
     user_tid: Annotated[int, Depends(validate_token)]
 ) -> TrackedProductModel:
-    logger.info(f"{user_tid}, {tracking.user_tid}")
+    """
+    Adds a new product to the user's tracked products,
+    scraping its price and adding it to the database
+    """
+
+    # We cannot add product to not ourselves
     if user_tid != tracking.user_tid:
         raise HTTPException(
             status_code=403,
             detail="Cannot modify other user data"
         )
 
+    # Getting the existing products of user
     existing_products = \
         app.state.database.get_tracked_products(user_tid)
 
-    lst = [(product.url == tracking.product_url or
+    # If any products are the ones the user already owns,
+    # do not add it a second time
+    if any([(product.url == tracking.product_url or
             product.sku == tracking.product_sku)
            for product in existing_products]
-    print(lst, flush=True)
-    print(existing_products[0].__dict__, flush=True)
-    print(tracking.product_url, flush=True)
-    print(tracking.product_sku, flush=True)
-
-    if any(
-        lst
-    ):
+           ):
         raise HTTPException(
             status_code=500,
             detail="You are already tracking this product!"
         )
 
+    # Scrape product info from Ozon
     product = app.state.scraper.scrape_product(
         tracking.product_sku,
         tracking.product_url
@@ -205,6 +223,7 @@ async def add_tracking(
             detail="Product could not be scraped"
         )
 
+    # Add the scraped product to the database
     id = app.state.database.add_product(product)
 
     if id is None:
@@ -213,12 +232,15 @@ async def add_tracking(
             detail="Database could not be inserted into"
         )
 
+    # Add the price of the product to history
     app.state.database.add_to_price_history([id], int(time.time()))
 
     product.id = id
 
+    # Set default tracking price of product
     default_tracking_price = str(float(product.price) * 0.9)
 
+    # Add the tracking entry to the database
     success = app.state.database.add_tracking(TrackingModel(
         user_tid=tracking.user_tid,
         product_id=id,
@@ -239,12 +261,18 @@ async def update_threshold(
     tracking: TrackingModel,
     user_tid: Annotated[int, Depends(validate_token)]
 ) -> StatusResponse:
+    """
+    Update the tracking with a new price threshold
+    """
+
+    # We cannot modify other users' data
     if user_tid != tracking.user_tid:
         raise HTTPException(
             status_code=500,
             detail="Unauthorized to perform actions on other users"
         )
 
+    # Add the tracking entry to the database
     success = app.state.database.add_tracking(tracking)
 
     if not success:
@@ -261,12 +289,18 @@ async def delete_tracking(
     tracking: TrackingModel,
     user_tid: Annotated[int, Depends(validate_token)]
 ) -> StatusResponse:
+    """
+    Delete our product from being tracked
+    """
+
+    # We cannot modify other users' data
     if user_tid != tracking.user_tid:
         raise HTTPException(
             status_code=500,
             detail="Unauthorized to perform actions on other users"
         )
 
+    # Delete the tracking entry from the database
     success = app.state.database.delete_tracking(tracking)
 
     if not success:
@@ -283,6 +317,10 @@ async def get_product_history(
     product_id: int,
     user_tid: Annotated[int, Depends(validate_token)]
 ) -> ProductHistoryResponse:
+    """
+    Get the price history of a product in the form of
+    a list of data points
+    """
     history = app.state.database.get_price_history(product_id)
 
     if history is None:
@@ -298,15 +336,22 @@ def gen_filter_foo(
     search_data: SearchProductsRequest,
     my_products_ids: list[int]
 ):
+    """
+    Generate a filter function for the searching functionality
+    """
     def filter_foo(product: TrackedProductModel) -> bool:
+        # We do not return products we are already tracking
         if product.id in my_products_ids:
             return False
+        # Filter by price
         if not search_data.min_price <= float(product.price) \
                 <= search_data.max_price:
             return False
+        # Filter by name
         if search_data.query and search_data.query.lower() \
                 not in product.name.lower():
             return False
+        # Filter by seller
         if search_data.seller and search_data.seller.lower() \
                 not in product.seller.lower():
             return False
@@ -319,7 +364,12 @@ async def search(
     search_data: SearchProductsRequest,
     user_tid: Annotated[int, Depends(validate_token)]
 ) -> SearchProductsResponse:
+    """
+    Search products that we are already tracking
+    so that the user can add them for themselves
+    """
 
+    # Getting the ids of our products for filter
     my_products = app.state.database.get_tracked_products(user_tid)
 
     if my_products is None:
@@ -331,6 +381,7 @@ async def search(
     my_products_ids = \
         set(map(lambda item: item.id, my_products))
 
+    # Getting all products to filter them
     products = app.state.database.get_products()
 
     if products is None:
@@ -346,7 +397,7 @@ async def search(
         ))
     )
 
-
+# Run api
 if __name__ == "__main__":
     uvicorn.run(
         "api:app",
